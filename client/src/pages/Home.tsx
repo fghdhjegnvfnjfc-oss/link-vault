@@ -2263,6 +2263,153 @@ function AddNewLinkModal({ isOpen, folderId, folderName, onClose, onSave }: AddN
   );
 }
 
+// ─── Create Folder Modal ────────────────────────────────────────
+interface CreateFolderModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onCreate: (name: string, icon: string) => void;
+}
+
+function CreateFolderModal({ isOpen, onClose, onCreate }: CreateFolderModalProps) {
+  const [name, setName] = useState("");
+  const [icon, setIcon] = useState("📁");
+  const emojiSuggestions = ["⚡", "🛠", "🎨", "📚", "🔧", "📰", "🌟", "💡", "🚀", "📱", "🎯", "🔐", "📊", "🎬", "🎵", "📸", "🌐", "💼", "🏆", "⭐"];
+
+  const handleCreate = () => {
+    if (name.trim() && icon.trim()) {
+      onCreate(name.trim(), icon.trim());
+      setName("");
+      setIcon("📁");
+      onClose();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="glass-card-strong rounded-2xl p-8 w-full max-w-md my-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          className="text-2xl font-bold mb-6"
+          style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+        >
+          Create New Folder
+        </h2>
+
+        <div className="space-y-4">
+          <div>
+            <label
+              className="block text-xs font-semibold mb-2 uppercase tracking-widest"
+              style={{ fontFamily: "Sora, sans-serif", color: "oklch(0.65 0.02 220)" }}
+            >
+              Folder Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter folder name"
+              className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
+              style={{
+                background: "oklch(1 0 0 / 6%)",
+                border: "1px solid oklch(1 0 0 / 12%)",
+                color: "#E2E8F0",
+                fontFamily: "DM Sans, sans-serif",
+              }}
+              onFocus={(e) => {
+                e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+              }}
+              onBlur={(e) => {
+                e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+              }}
+            />
+          </div>
+
+          <div>
+            <label
+              className="block text-xs font-semibold mb-2 uppercase tracking-widest"
+              style={{ fontFamily: "Sora, sans-serif", color: "oklch(0.65 0.02 220)" }}
+            >
+              Folder Icon
+            </label>
+            <div className="mb-3">
+              <input
+                type="text"
+                value={icon}
+                onChange={(e) => setIcon(e.target.value)}
+                placeholder="Paste an emoji"
+                maxLength={2}
+                className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all text-center text-lg"
+                style={{
+                  background: "oklch(1 0 0 / 6%)",
+                  border: "1px solid oklch(1 0 0 / 12%)",
+                  color: "#E2E8F0",
+                  fontFamily: "DM Sans, sans-serif",
+                }}
+                onFocus={(e) => {
+                  e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+                }}
+              />
+            </div>
+            <div className="grid grid-cols-5 gap-2">
+              {emojiSuggestions.map((emoji) => (
+                <button
+                  key={emoji}
+                  onClick={() => setIcon(emoji)}
+                  className="p-2 rounded-lg text-lg transition-all"
+                  style={{
+                    background: icon === emoji ? "oklch(0.65 0.18 200 / 20%)" : "oklch(1 0 0 / 8%)",
+                    border: icon === emoji ? "1px solid oklch(0.65 0.18 200 / 40%)" : "1px solid transparent",
+                  }}
+                  title={emoji}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-3 mt-8">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
+            style={{
+              background: "oklch(1 0 0 / 8%)",
+              color: "oklch(0.65 0.02 220)",
+              fontFamily: "Sora, sans-serif",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleCreate}
+            disabled={!name.trim() || !icon.trim()}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+            style={{
+              background: "linear-gradient(135deg, oklch(0.65 0.18 200), oklch(0.55 0.20 215))",
+              color: "#0F172A",
+              fontFamily: "Sora, sans-serif",
+            }}
+          >
+            <Plus size={14} />
+            Create
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Edit Folder Modal ────────────────────────────────────────
 interface EditFolderModalProps {
   isOpen: boolean;
@@ -3291,6 +3438,7 @@ function VaultPage({ onLock }: { onLock: () => void }) {
   const [showAddLinkModal, setShowAddLinkModal] = useState(false);
   const [showEditFolderModal, setShowEditFolderModal] = useState(false);
   const [editingFolder, setEditingFolder] = useState<FolderData | null>(null);
+  const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [showOwnerSignIn, setShowOwnerSignIn] = useState(false);
   const [isOwnerMode, setIsOwnerMode] = useState(false);
   const [showOwnerSettings, setShowOwnerSettings] = useState(false);
@@ -3538,6 +3686,29 @@ function VaultPage({ onLock }: { onLock: () => void }) {
     }
   };
 
+  const handleCreateFolder = (name: string, icon: string) => {
+    const newFolder: FolderData = {
+      id: Math.random().toString(36).substr(2, 9),
+      name,
+      icon,
+      color: "oklch(0.65 0.18 200)",
+      links: [],
+    };
+    if (currentAdminEmail) {
+      const newEntry: AuditLogEntry = {
+        id: Math.random().toString(36).substr(2, 9),
+        timestamp: Date.now(),
+        email: currentAdminEmail,
+        action: "folder_added",
+        resourceType: "folder",
+        resourceName: name,
+      };
+      setAuditLog([...auditLog, newEntry]);
+    }
+    setVaultData([...vaultData, newFolder]);
+    setShowCreateFolder(false);
+  };
+
   const handleOwnerSignIn = () => {
     setIsOwnerMode(true);
     setShowOwnerSignIn(false);
@@ -3702,6 +3873,12 @@ function VaultPage({ onLock }: { onLock: () => void }) {
         folderName={activeFolderData?.name || ""}
         onClose={() => setShowAddLinkModal(false)}
         onSave={handleAddNewLink}
+      />
+
+      <CreateFolderModal
+        isOpen={showCreateFolder}
+        onClose={() => setShowCreateFolder(false)}
+        onCreate={handleCreateFolder}
       />
 
       <EditFolderModal
@@ -3926,6 +4103,28 @@ function VaultPage({ onLock }: { onLock: () => void }) {
               >
                 <Plus size={15} />
                 <span>Add New Link</span>
+              </button>
+            )}
+
+            {isEditMode && (
+              <button
+                onClick={() => setShowCreateFolder(true)}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+                style={{
+                  background: "oklch(0.65 0.18 145 / 10%)",
+                  color: "oklch(0.75 0.18 145)",
+                  fontFamily: "DM Sans, sans-serif",
+                  border: "1px solid oklch(0.65 0.18 145 / 20%)",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 145 / 15%)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 145 / 10%)";
+                }}
+              >
+                <Folder size={15} />
+                <span>Create Folder</span>
               </button>
             )}
 
