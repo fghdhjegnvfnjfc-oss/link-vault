@@ -2579,6 +2579,205 @@ function EditFolderModal({ isOpen, folder, onClose, onSave, onDelete }: EditFold
   );
 }
 
+// ─── Batch Actions Modal ─────────────────────────────────────────
+interface BatchActionsModalProps {
+  isOpen: boolean;
+  selectedCount: number;
+  folders: FolderData[];
+  onClose: () => void;
+  onDelete: () => void;
+  onMove: (folderId: string) => void;
+  onSetPassword: (password: string | null) => void;
+}
+
+function BatchActionsModal({
+  isOpen,
+  selectedCount,
+  folders,
+  onClose,
+  onDelete,
+  onMove,
+  onSetPassword,
+}: BatchActionsModalProps) {
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [removeProtection, setRemoveProtection] = useState(false);
+  const [action, setAction] = useState<"delete" | "move" | "password" | null>(null);
+
+  const handleConfirm = () => {
+    if (action === "delete") {
+      onDelete();
+    } else if (action === "move" && folders.length > 0) {
+      onMove(folders[0].id);
+    } else if (action === "password") {
+      onSetPassword(removeProtection ? null : password.trim());
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="glass-card-strong rounded-2xl p-8 w-full max-w-md my-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          className="text-2xl font-bold mb-2"
+          style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+        >
+          Batch Actions
+        </h2>
+        <p className="text-sm mb-6" style={{ color: "oklch(0.60 0.02 220)" }}>
+          {selectedCount} link{selectedCount !== 1 ? "s" : ""} selected
+        </p>
+
+        {!action && (
+          <div className="space-y-3">
+            <button
+              onClick={() => setAction("move")}
+              className="w-full py-2.5 rounded-lg text-sm font-semibold transition-all"
+              style={{
+                background: "oklch(0.65 0.18 200 / 15%)",
+                color: "oklch(0.75 0.18 200)",
+                fontFamily: "Sora, sans-serif",
+              }}
+            >
+              Move to Folder
+            </button>
+            <button
+              onClick={() => setAction("password")}
+              className="w-full py-2.5 rounded-lg text-sm font-semibold transition-all"
+              style={{
+                background: "oklch(0.65 0.18 200 / 15%)",
+                color: "oklch(0.75 0.18 200)",
+                fontFamily: "Sora, sans-serif",
+              }}
+            >
+              Set Password
+            </button>
+            <button
+              onClick={() => setAction("delete")}
+              className="w-full py-2.5 rounded-lg text-sm font-semibold transition-all"
+              style={{
+                background: "oklch(0.62 0.22 25 / 15%)",
+                color: "oklch(0.70 0.20 25)",
+                fontFamily: "Sora, sans-serif",
+              }}
+            >
+              Delete All
+            </button>
+          </div>
+        )}
+
+        {action === "move" && (
+          <div className="space-y-4">
+            <p style={{ color: "oklch(0.65 0.02 220)" }} className="text-sm">
+              Select destination folder:
+            </p>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {folders.map((folder) => (
+                <button
+                  key={folder.id}
+                  onClick={() => onMove(folder.id)}
+                  className="w-full py-2 px-3 rounded-lg text-sm text-left transition-all"
+                  style={{
+                    background: "oklch(1 0 0 / 8%)",
+                    color: "#E2E8F0",
+                    fontFamily: "DM Sans, sans-serif",
+                  }}
+                >
+                  {folder.icon} {folder.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {action === "password" && (
+          <div className="space-y-4">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={removeProtection}
+                onChange={(e) => setRemoveProtection(e.target.checked)}
+                className="w-4 h-4 rounded"
+              />
+              <span style={{ color: "oklch(0.65 0.02 220)" }} className="text-sm">
+                Remove password protection
+              </span>
+            </label>
+            {!removeProtection && (
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  className="w-full px-4 py-2.5 pr-12 rounded-lg text-sm outline-none"
+                  style={{
+                    background: "oklch(1 0 0 / 6%)",
+                    border: "1px solid oklch(1 0 0 / 12%)",
+                    color: "#E2E8F0",
+                    fontFamily: "DM Sans, sans-serif",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1"
+                  style={{ color: "oklch(0.55 0.02 220)" }}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {action === "delete" && (
+          <p style={{ color: "oklch(0.70 0.20 25)" }} className="text-sm mb-4">
+            Are you sure? This action cannot be undone.
+          </p>
+        )}
+
+        <div className="flex gap-3 mt-8">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
+            style={{
+              background: "oklch(1 0 0 / 8%)",
+              color: "oklch(0.65 0.02 220)",
+              fontFamily: "Sora, sans-serif",
+            }}
+          >
+            Cancel
+          </button>
+          {action && (
+            <button
+              onClick={handleConfirm}
+              disabled={action === "password" && !removeProtection && !password.trim()}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
+              style={{
+                background: action === "delete" 
+                  ? "oklch(0.62 0.22 25 / 40%)" 
+                  : "linear-gradient(135deg, oklch(0.65 0.18 200), oklch(0.55 0.20 215))",
+                color: action === "delete" ? "oklch(0.70 0.20 25)" : "#0F172A",
+                fontFamily: "Sora, sans-serif",
+              }}
+            >
+              Confirm
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Set Link Password Modal ───────────────────────────────────
 interface SetLinkPasswordModalProps {
   isOpen: boolean;
@@ -3093,6 +3292,8 @@ interface LinkCardProps {
   isEditMode?: boolean;
   onEdit?: (link: LinkItem) => void;
   onClickLocked?: () => void;
+  isSelected?: boolean;
+  onToggleSelect?: (linkId: string) => void;
 }
 
 function LinkCard({
@@ -3106,6 +3307,8 @@ function LinkCard({
   isEditMode,
   onEdit,
   onClickLocked,
+  isSelected,
+  onToggleSelect,
 }: LinkCardProps) {
   const [imgError, setImgError] = useState(false);
 
@@ -3159,33 +3362,53 @@ function LinkCard({
         el.style.transform = "translateY(0)";
       }}
     >
-      {/* Lock icon or drag handle */}
-      <div
-        className="absolute top-2 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none"
-        style={{
-          background: isProtected
-            ? "oklch(0.70 0.20 25 / 20%)"
-            : "oklch(0.65 0.18 200 / 15%)",
-          color: isProtected
-            ? "oklch(0.70 0.20 25)"
-            : "oklch(0.65 0.18 200)",
-        }}
-        title={
-          isEditMode
-            ? "Click to edit"
-            : isProtected
+      {/* Checkbox or Lock icon or drag handle */}
+      {isEditMode && (
+        <div
+          className="absolute top-2 right-2 p-1.5 rounded-lg transition-opacity duration-150"
+          style={{
+            background: isSelected
+              ? "oklch(0.65 0.18 200 / 40%)"
+              : "oklch(0.65 0.18 200 / 15%)",
+            color: "oklch(0.65 0.18 200)",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={isSelected || false}
+            onChange={() => onToggleSelect?.(link.id)}
+            onClick={(e) => e.stopPropagation()}
+            className="w-4 h-4 rounded cursor-pointer"
+            style={{
+              accentColor: "oklch(0.65 0.18 200)",
+            }}
+          />
+        </div>
+      )}
+      {!isEditMode && (
+        <div
+          className="absolute top-2 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none"
+          style={{
+            background: isProtected
+              ? "oklch(0.70 0.20 25 / 20%)"
+              : "oklch(0.65 0.18 200 / 15%)",
+            color: isProtected
+              ? "oklch(0.70 0.20 25)"
+              : "oklch(0.65 0.18 200)",
+          }}
+          title={
+            isProtected
               ? "Click to unlock"
               : "Drag to reorder"
-        }
-      >
-        {isProtected ? (
-          <Lock size={14} />
-        ) : isEditMode ? (
-          <Edit2 size={14} />
-        ) : (
-          <GripVertical size={14} />
-        )}
-      </div>
+          }
+        >
+          {isProtected ? (
+            <Lock size={14} />
+          ) : (
+            <GripVertical size={14} />
+          )}
+        </div>
+      )}
 
       <div className="flex items-start gap-3">
         {/* Favicon */}
@@ -3451,6 +3674,8 @@ function VaultPage({ onLock }: { onLock: () => void }) {
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>(loadPendingApprovals);
   const [showPendingApprovals, setShowPendingApprovals] = useState(false);
   const [showAdminManagement, setShowAdminManagement] = useState(false);
+  const [selectedLinkIds, setSelectedLinkIds] = useState<Set<string>>(new Set());
+  const [showBatchActionsModal, setShowBatchActionsModal] = useState(false);
 
   // Save to localStorage whenever vault data changes
   useEffect(() => {
@@ -3709,6 +3934,128 @@ function VaultPage({ onLock }: { onLock: () => void }) {
     setShowCreateFolder(false);
   };
 
+  const toggleLinkSelection = (linkId: string) => {
+    const newSelected = new Set(selectedLinkIds);
+    if (newSelected.has(linkId)) {
+      newSelected.delete(linkId);
+    } else {
+      newSelected.add(linkId);
+    }
+    setSelectedLinkIds(newSelected);
+  };
+
+  const handleBatchDelete = () => {
+    const updatedFolders = vaultData.map((folder) => ({
+      ...folder,
+      links: folder.links.filter((link) => !selectedLinkIds.has(link.id)),
+    }));
+    if (currentAdminEmail) {
+      selectedLinkIds.forEach((linkId) => {
+        const link = vaultData
+          .flatMap((f) => f.links)
+          .find((l) => l.id === linkId);
+        if (link) {
+          const newEntry: AuditLogEntry = {
+            id: Math.random().toString(36).substr(2, 9),
+            timestamp: Date.now(),
+            email: currentAdminEmail,
+            action: "link_deleted",
+            resourceType: "link",
+            resourceName: link.title,
+          };
+          setAuditLog((prev) => [...prev, newEntry]);
+        }
+      });
+    }
+    setVaultData(updatedFolders);
+    setSelectedLinkIds(new Set());
+    setShowBatchActionsModal(false);
+  };
+
+  const handleBatchMove = (targetFolderId: string) => {
+    const updatedFolders = vaultData.map((folder) => {
+      if (folder.id === targetFolderId) {
+        const linksToMove = vaultData
+          .flatMap((f) => f.links)
+          .filter((link) => selectedLinkIds.has(link.id));
+        return {
+          ...folder,
+          links: [...folder.links, ...linksToMove],
+        };
+      }
+      return {
+        ...folder,
+        links: folder.links.filter((link) => !selectedLinkIds.has(link.id)),
+      };
+    });
+    if (currentAdminEmail) {
+      selectedLinkIds.forEach((linkId) => {
+        const link = vaultData
+          .flatMap((f) => f.links)
+          .find((l) => l.id === linkId);
+        if (link) {
+          const newEntry: AuditLogEntry = {
+            id: Math.random().toString(36).substr(2, 9),
+            timestamp: Date.now(),
+            email: currentAdminEmail,
+            action: "link_edited",
+            resourceType: "link",
+            resourceName: link.title,
+          };
+          setAuditLog((prev) => [...prev, newEntry]);
+        }
+      });
+    }
+    setVaultData(updatedFolders);
+    setSelectedLinkIds(new Set());
+    setShowBatchActionsModal(false);
+  };
+
+  const handleBatchSetPassword = (password: string | null) => {
+    const newProtectedLinks = new Map(protectedLinks);
+    selectedLinkIds.forEach((linkId) => {
+      if (password) {
+        const link = vaultData
+          .flatMap((f) => f.links)
+          .find((l) => l.id === linkId);
+        const folder = vaultData.find((f) =>
+          f.links.some((l) => l.id === linkId)
+        );
+        if (link && folder) {
+          newProtectedLinks.set(linkId, {
+            linkId,
+            password,
+            folderName: folder.name,
+            linkTitle: link.title,
+          });
+        }
+      } else {
+        newProtectedLinks.delete(linkId);
+      }
+    });
+    setProtectedLinks(newProtectedLinks);
+    if (currentAdminEmail) {
+      selectedLinkIds.forEach((linkId) => {
+        const link = vaultData
+          .flatMap((f) => f.links)
+          .find((l) => l.id === linkId);
+        if (link) {
+          const newEntry: AuditLogEntry = {
+            id: Math.random().toString(36).substr(2, 9),
+            timestamp: Date.now(),
+            email: currentAdminEmail,
+            action: "link_password_set",
+            resourceType: "link",
+            resourceName: link.title,
+          };
+          setAuditLog((prev) => [...prev, newEntry]);
+        }
+      });
+    }
+    setSelectedLinkIds(new Set());
+    setShowBatchActionsModal(false);
+  };
+
   const handleOwnerSignIn = () => {
     setIsOwnerMode(true);
     setShowOwnerSignIn(false);
@@ -3879,6 +4226,16 @@ function VaultPage({ onLock }: { onLock: () => void }) {
         isOpen={showCreateFolder}
         onClose={() => setShowCreateFolder(false)}
         onCreate={handleCreateFolder}
+      />
+
+      <BatchActionsModal
+        isOpen={showBatchActionsModal}
+        selectedCount={selectedLinkIds.size}
+        folders={vaultData}
+        onClose={() => setShowBatchActionsModal(false)}
+        onDelete={handleBatchDelete}
+        onMove={handleBatchMove}
+        onSetPassword={handleBatchSetPassword}
       />
 
       <EditFolderModal
@@ -4147,6 +4504,28 @@ function VaultPage({ onLock }: { onLock: () => void }) {
               >
                 <Key size={15} />
                 <span>Password Manager</span>
+              </button>
+            )}
+
+            {isEditMode && selectedLinkIds.size > 0 && (
+              <button
+                onClick={() => setShowBatchActionsModal(true)}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 relative"
+                style={{
+                  background: "linear-gradient(135deg, oklch(0.65 0.18 200 / 20%), oklch(0.55 0.20 215 / 20%))",
+                  color: "oklch(0.75 0.18 200)",
+                  fontFamily: "DM Sans, sans-serif",
+                  border: "1px solid oklch(0.65 0.18 200 / 30%)",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, oklch(0.65 0.18 200 / 30%), oklch(0.55 0.20 215 / 30%))";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "linear-gradient(135deg, oklch(0.65 0.18 200 / 20%), oklch(0.55 0.20 215 / 20%))";
+                }}
+              >
+                <Check size={15} />
+                <span>Batch Actions ({selectedLinkIds.size})</span>
               </button>
             )}
 
@@ -4640,6 +5019,8 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                     isEditMode={isEditMode}
                     onEdit={handleEditLink}
                     onClickLocked={() => handleClickLockedLink(link.id)}
+                    isSelected={selectedLinkIds.has(link.id)}
+                    onToggleSelect={toggleLinkSelection}
                   />
                 ))}
               </div>
