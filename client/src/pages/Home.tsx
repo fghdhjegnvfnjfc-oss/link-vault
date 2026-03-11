@@ -23,6 +23,7 @@ const PASSWORDS_KEY = "link-vault-passwords";
 const CLICK_STATS_KEY = "link-vault-clicks";
 const AUDIT_LOG_KEY = "link-vault-audit-log";
 const ADMIN_EMAILS_KEY = "link-vault-admin-emails";
+const PENDING_APPROVALS_KEY = "link-vault-pending-approvals";
 
 // ─── Link Data ────────────────────────────────────────────────
 interface LinkItem {
@@ -70,6 +71,13 @@ interface AuditLogEntry {
 interface AdminEmail {
   email: string;
   addedAt: number;
+}
+
+interface PendingApproval {
+  id: string;
+  email: string;
+  requestedAt: number;
+  status: "pending" | "approved" | "rejected";
 }
 
 const DEFAULT_VAULT_DATA: FolderData[] = [
@@ -318,6 +326,67 @@ function removeAdminEmail(email: string): void {
   const emails = loadAdminEmails();
   const filtered = emails.filter((e) => e.email !== email);
   saveAdminEmails(filtered);
+}
+
+function loadPendingApprovals(): PendingApproval[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = localStorage.getItem(PENDING_APPROVALS_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch (e) {
+    console.error("Failed to load pending approvals:", e);
+  }
+  return [];
+}
+
+function savePendingApprovals(approvals: PendingApproval[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(PENDING_APPROVALS_KEY, JSON.stringify(approvals));
+  } catch (e) {
+    console.error("Failed to save pending approvals:", e);
+  }
+}
+
+function requestEmailApproval(email: string): void {
+  const approvals = loadPendingApprovals();
+  const approvedEmails = loadAdminEmails();
+  if (approvedEmails.find((e) => e.email === email)) {
+    return;
+  }
+  if (!approvals.find((a) => a.email === email && a.status === "pending")) {
+    approvals.push({
+      id: Math.random().toString(36).substr(2, 9),
+      email,
+      requestedAt: Date.now(),
+      status: "pending",
+    });
+    savePendingApprovals(approvals);
+  }
+}
+
+function approveEmailRequest(approvalId: string): void {
+  const approvals = loadPendingApprovals();
+  const approval = approvals.find((a) => a.id === approvalId);
+  if (approval) {
+    approval.status = "approved";
+    addAdminEmail(approval.email);
+    savePendingApprovals(approvals);
+  }
+}
+
+function rejectEmailRequest(approvalId: string): void {
+  const approvals = loadPendingApprovals();
+  const approval = approvals.find((a) => a.id === approvalId);
+  if (approval) {
+    approval.status = "rejected";
+    savePendingApprovals(approvals);
+  }
+}
+
+function isEmailApproved(email: string): boolean {
+  const approvedEmails = loadAdminEmails();
+  return approvedEmails.some((e) => e.email === email);
 }
 
 // ─── Favicon helper ───────────────────────────────────────────
@@ -711,11 +780,17 @@ function AdminEmailSignInModal({ isOpen, onClose, onSuccess }: AdminEmailSignInM
       setError("Please enter a valid email address.");
       return;
     }
-    addAdminEmail(trimmedEmail);
-    setError("");
-    setEmail("");
-    onSuccess(trimmedEmail);
-    onClose();
+    if (isEmailApproved(trimmedEmail)) {
+      setError("");
+      setEmail("");
+      onSuccess(trimmedEmail);
+      onClose();
+    } else {
+      requestEmailApproval(trimmedEmail);
+      setError("");
+      setEmail("");
+      onClose();
+    }
   };
 
   if (!isOpen) return null;
@@ -736,7 +811,7 @@ function AdminEmailSignInModal({ isOpen, onClose, onSuccess }: AdminEmailSignInM
           Admin Sign In
         </h2>
         <p className="text-sm mb-6" style={{ color: "oklch(0.60 0.02 220)" }}>
-          Enter your email to access admin mode
+          Enter your email to request admin access. Owner approval required for new emails.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -807,6 +882,143 @@ function AdminEmailSignInModal({ isOpen, onClose, onSuccess }: AdminEmailSignInM
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Pending Approvals Modal ─────────────────────────────────────
+interface PendingApprovalsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  pendingApprovals: PendingApproval[];
+  onApprove: (approvalId: string) => void;
+  onReject: (approvalId: string) => void;
+}
+
+function PendingApprovalsModal({
+  isOpen,
+  onClose,
+  pendingApprovals,
+  onApprove,
+  onReject,
+}: PendingApprovalsModalProps) {
+  const pendingOnly = useMemo(
+    () => pendingApprovals.filter((a) => a.status === "pending"),
+    [pendingApprovals]
+  );
+
+  const formatTime = (timestamp: number): string => {
+    const date = new Date(timestamp);
+    return date.toLocaleString();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="glass-card-strong rounded-2xl p-8 w-full max-w-2xl my-8 max-h-[80vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          className="text-2xl font-bold mb-2"
+          style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+        >
+          Pending Admin Approvals
+        </h2>
+        <p className="text-sm mb-6" style={{ color: "oklch(0.60 0.02 220)" }}>
+          Review and approve new admin email requests
+        </p>
+
+        <div className="space-y-3">
+          {pendingOnly.length === 0 ? (
+            <p
+              className="text-sm text-center py-8"
+              style={{ color: "oklch(0.55 0.02 220)" }}
+            >
+              No pending approvals.
+            </p>
+          ) : (
+            pendingOnly.map((approval) => (
+              <div
+                key={approval.id}
+                className="p-4 rounded-lg border"
+                style={{
+                  background: "oklch(1 0 0 / 5%)",
+                  border: "1px solid oklch(1 0 0 / 10%)",
+                }}
+              >
+                <div className="flex items-start justify-between gap-4 mb-3">
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className="text-sm font-semibold truncate"
+                      style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+                    >
+                      {approval.email}
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: "oklch(0.55 0.02 220)" }}>
+                      Requested: {formatTime(approval.requestedAt)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => onApprove(approval.id)}
+                    className="flex-1 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all"
+                    style={{
+                      background: "oklch(0.65 0.18 145 / 20%)",
+                      color: "oklch(0.75 0.18 145)",
+                      fontFamily: "Sora, sans-serif",
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 145 / 30%)";
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 145 / 20%)";
+                    }}
+                  >
+                    <Check size={14} />
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => onReject(approval.id)}
+                    className="flex-1 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-all"
+                    style={{
+                      background: "oklch(0.62 0.22 25 / 15%)",
+                      color: "oklch(0.70 0.20 25)",
+                      fontFamily: "Sora, sans-serif",
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.62 0.22 25 / 25%)";
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.62 0.22 25 / 15%)";
+                    }}
+                  >
+                    <X size={14} />
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <button
+          onClick={onClose}
+          className="w-full mt-8 py-2.5 rounded-xl text-sm font-semibold transition-all"
+          style={{
+            background: "oklch(1 0 0 / 8%)",
+            color: "oklch(0.65 0.02 220)",
+            fontFamily: "Sora, sans-serif",
+          }}
+        >
+          Close
+        </button>
       </div>
     </div>
   );
@@ -2629,6 +2841,8 @@ function VaultPage({ onLock }: { onLock: () => void }) {
   const [currentAdminEmail, setCurrentAdminEmail] = useState<string | null>(null);
   const [showAdminEmailSignIn, setShowAdminEmailSignIn] = useState(false);
   const [showAuditLog, setShowAuditLog] = useState(false);
+  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>(loadPendingApprovals);
+  const [showPendingApprovals, setShowPendingApprovals] = useState(false);
 
   // Save to localStorage whenever vault data changes
   useEffect(() => {
@@ -2646,6 +2860,10 @@ function VaultPage({ onLock }: { onLock: () => void }) {
   useEffect(() => {
     saveAdminEmails(adminEmails);
   }, [adminEmails]);
+
+  useEffect(() => {
+    savePendingApprovals(pendingApprovals);
+  }, [pendingApprovals]);
 
   const allLinks = useMemo(
     () => vaultData.flatMap((f) => f.links.map((l) => ({ ...l, folderId: f.id }))),
@@ -3067,6 +3285,20 @@ function VaultPage({ onLock }: { onLock: () => void }) {
         auditLog={auditLog}
       />
 
+      <PendingApprovalsModal
+        isOpen={showPendingApprovals}
+        onClose={() => setShowPendingApprovals(false)}
+        pendingApprovals={pendingApprovals}
+        onApprove={(id) => {
+          approveEmailRequest(id);
+          setPendingApprovals(loadPendingApprovals());
+        }}
+        onReject={(id) => {
+          rejectEmailRequest(id);
+          setPendingApprovals(loadPendingApprovals());
+        }}
+      />
+
       {/* Sidebar */}
       <aside
         className="flex-shrink-0 flex flex-col transition-all duration-300"
@@ -3307,6 +3539,37 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                 >
                   <BarChart3 size={15} />
                   <span>Analytics</span>
+                </button>
+
+                <button
+                  onClick={() => setShowPendingApprovals(true)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+                  style={{
+                    background: "oklch(0.65 0.18 145 / 10%)",
+                    color: "oklch(0.75 0.18 145)",
+                    fontFamily: "DM Sans, sans-serif",
+                    border: "1px solid oklch(0.65 0.18 145 / 20%)",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 145 / 15%)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 145 / 10%)";
+                  }}
+                >
+                  <Shield size={15} />
+                  <span>Pending Approvals</span>
+                  {pendingApprovals.filter((a) => a.status === "pending").length > 0 && (
+                    <span
+                      className="ml-auto text-xs font-bold px-2 py-0.5 rounded-full"
+                      style={{
+                        background: "oklch(0.62 0.22 25 / 30%)",
+                        color: "oklch(0.70 0.20 25)",
+                      }}
+                    >
+                      {pendingApprovals.filter((a) => a.status === "pending").length}
+                    </span>
+                  )}
                 </button>
 
                 <button
