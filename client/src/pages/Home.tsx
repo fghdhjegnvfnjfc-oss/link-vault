@@ -1841,6 +1841,32 @@ function OwnerSettingsModal({
               className="block text-xs font-semibold mb-2 uppercase tracking-widest"
               style={{ fontFamily: "Sora, sans-serif", color: "oklch(0.65 0.02 220)" }}
             >
+              Owner Password (Current)
+            </label>
+            <input
+              type="password"
+              placeholder="Enter current owner password to change settings"
+              className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all mb-4"
+              style={{
+                background: "oklch(1 0 0 / 6%)",
+                border: "1px solid oklch(1 0 0 / 12%)",
+                color: "#E2E8F0",
+                fontFamily: "DM Sans, sans-serif",
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.border = "1px solid oklch(1 0 0 / 12%)";
+              }}
+            />
+          </div>
+
+          <div>
+            <label
+              className="block text-xs font-semibold mb-2 uppercase tracking-widest"
+              style={{ fontFamily: "Sora, sans-serif", color: "oklch(0.65 0.02 220)" }}
+            >
               Admin Password
             </label>
             <div className="relative">
@@ -3992,6 +4018,26 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                 </button>
 
                 <button
+                  onClick={() => setShowAuditLog(true)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+                  style={{
+                    background: "oklch(0.65 0.18 145 / 10%)",
+                    color: "oklch(0.75 0.18 145)",
+                    fontFamily: "DM Sans, sans-serif",
+                    border: "1px solid oklch(0.65 0.18 145 / 20%)",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 145 / 15%)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 145 / 10%)";
+                  }}
+                >
+                  <BarChart3 size={15} />
+                  <span>Audit Log</span>
+                </button>
+
+                <button
                   onClick={() => setShowPendingApprovals(true)}
                   className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
                   style={{
@@ -4089,26 +4135,6 @@ function VaultPage({ onLock }: { onLock: () => void }) {
 
             {currentAdminEmail && (
               <>
-                <button
-                  onClick={() => setShowAuditLog(true)}
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
-                  style={{
-                    background: "oklch(0.65 0.18 200 / 10%)",
-                    color: "oklch(0.75 0.18 200)",
-                    fontFamily: "DM Sans, sans-serif",
-                    border: "1px solid oklch(0.65 0.18 200 / 20%)",
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 200 / 15%)";
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 200 / 10%)";
-                  }}
-                >
-                  <BarChart3 size={15} />
-                  <span>Audit Log</span>
-                </button>
-
                 <button
                   onClick={handleAdminLogout}
                   className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
