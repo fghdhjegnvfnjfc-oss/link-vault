@@ -1,17 +1,19 @@
 /* =============================================================
-   LINK VAULT — Home Page with Drag-and-Drop Reordering
+   LINK VAULT — Home Page with Edit Mode
    Design: Neo-Noir / Glassmorphism Dark
-   - Lock screen: centered frosted glass card over mesh gradient bg
+   - Lock screen: password gate to access vault
    - Vault page: sidebar folder nav + main link card grid
-   - Drag-and-drop: reorder links within folders and folders themselves
-   - Persistence: localStorage saves reordered state
+   - Edit mode: second password unlocks admin panel to edit links
+   - Drag-and-drop: reorder links and folders
+   - Persistence: localStorage saves all changes
    ============================================================= */
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Eye, EyeOff, Lock, Unlock, ExternalLink, Folder, FolderOpen, Search, X, ChevronRight, Shield, LogOut, GripVertical } from "lucide-react";
+import { Eye, EyeOff, Lock, Unlock, ExternalLink, Folder, Search, X, ChevronRight, Shield, LogOut, GripVertical, Edit2, Save, Trash2, Plus, Check } from "lucide-react";
 
 // ─── Configuration ────────────────────────────────────────────
 const VAULT_PASSWORD = "vault2024";
+const ADMIN_PASSWORD = "admin2024";
 const STORAGE_KEY = "link-vault-data";
 
 // ─── Link Data ────────────────────────────────────────────────
@@ -137,6 +139,371 @@ function getFaviconUrl(url: string): string {
   }
 }
 
+// ─── Admin Password Modal ──────────────────────────────────────
+interface AdminPasswordModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function AdminPasswordModal({ isOpen, onClose, onSuccess }: AdminPasswordModalProps) {
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [isShaking, setIsShaking] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setPassword("");
+      setError("");
+      setIsShaking(false);
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [isOpen]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password.trim()) return;
+
+    if (password === ADMIN_PASSWORD) {
+      setError("");
+      setPassword("");
+      onSuccess();
+      onClose();
+    } else {
+      setError("Incorrect admin password.");
+      setIsShaking(true);
+      setPassword("");
+      setTimeout(() => setIsShaking(false), 600);
+      inputRef.current?.focus();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+      onClick={onClose}
+    >
+      <div
+        className={`glass-card-strong rounded-2xl p-8 w-full max-w-md ${isShaking ? "shake" : ""}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          className="text-2xl font-bold mb-2"
+          style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+        >
+          Admin Access
+        </h2>
+        <p className="text-sm mb-6" style={{ color: "oklch(0.60 0.02 220)" }}>
+          Enter the admin password to edit links
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="relative">
+            <input
+              ref={inputRef}
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (error) setError("");
+              }}
+              placeholder="Admin password"
+              className="w-full px-4 py-3 pr-12 rounded-xl text-sm outline-none transition-all duration-200"
+              style={{
+                background: "oklch(1 0 0 / 6%)",
+                border: error
+                  ? "1px solid oklch(0.62 0.22 25 / 70%)"
+                  : "1px solid oklch(1 0 0 / 12%)",
+                color: "#E2E8F0",
+                fontFamily: "DM Sans, sans-serif",
+                boxShadow: error
+                  ? "0 0 0 3px oklch(0.62 0.22 25 / 15%)"
+                  : "none",
+              }}
+              onFocus={(e) => {
+                if (!error) {
+                  e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+                  e.target.style.boxShadow = "0 0 0 3px oklch(0.65 0.18 200 / 15%)";
+                }
+              }}
+              onBlur={(e) => {
+                if (!error) {
+                  e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+                  e.target.style.boxShadow = "none";
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded transition-colors duration-150"
+              style={{ color: "oklch(0.55 0.02 220)" }}
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+
+          {error && (
+            <p
+              className="text-xs flex items-center gap-1.5"
+              style={{ color: "oklch(0.70 0.20 25)" }}
+            >
+              <X size={12} />
+              {error}
+            </p>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200"
+              style={{
+                background: "oklch(1 0 0 / 8%)",
+                color: "oklch(0.65 0.02 220)",
+                fontFamily: "Sora, sans-serif",
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLButtonElement).style.background = "oklch(1 0 0 / 12%)";
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLButtonElement).style.background = "oklch(1 0 0 / 8%)";
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!password.trim()}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 disabled:opacity-50"
+              style={{
+                background: "linear-gradient(135deg, oklch(0.65 0.18 200), oklch(0.55 0.20 215))",
+                color: "#0F172A",
+                fontFamily: "Sora, sans-serif",
+                boxShadow: "0 4px 20px oklch(0.65 0.18 200 / 30%)",
+              }}
+              onMouseEnter={(e) => {
+                (e.target as HTMLButtonElement).style.boxShadow =
+                  "0 4px 30px oklch(0.65 0.18 200 / 50%)";
+              }}
+              onMouseLeave={(e) => {
+                (e.target as HTMLButtonElement).style.boxShadow =
+                  "0 4px 20px oklch(0.65 0.18 200 / 30%)";
+              }}
+            >
+              Unlock
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Edit Link Modal ───────────────────────────────────────────
+interface EditLinkModalProps {
+  isOpen: boolean;
+  link: LinkItem | null;
+  onClose: () => void;
+  onSave: (link: LinkItem) => void;
+  onDelete: () => void;
+}
+
+function EditLinkModal({ isOpen, link, onClose, onSave, onDelete }: EditLinkModalProps) {
+  const [title, setTitle] = useState("");
+  const [url, setUrl] = useState("");
+  const [description, setDescription] = useState("");
+
+  useEffect(() => {
+    if (link) {
+      setTitle(link.title);
+      setUrl(link.url);
+      setDescription(link.description);
+    }
+  }, [link, isOpen]);
+
+  const handleSave = () => {
+    if (link && title.trim() && url.trim()) {
+      onSave({
+        ...link,
+        title: title.trim(),
+        url: url.trim(),
+        description: description.trim(),
+      });
+      onClose();
+    }
+  };
+
+  if (!isOpen || !link) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+      onClick={onClose}
+    >
+      <div
+        className="glass-card-strong rounded-2xl p-8 w-full max-w-md max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          className="text-2xl font-bold mb-6"
+          style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+        >
+          Edit Link
+        </h2>
+
+        <div className="space-y-4">
+          <div>
+            <label
+              className="block text-xs font-semibold mb-2 uppercase tracking-widest"
+              style={{ fontFamily: "Sora, sans-serif", color: "oklch(0.65 0.02 220)" }}
+            >
+              Title
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
+              style={{
+                background: "oklch(1 0 0 / 6%)",
+                border: "1px solid oklch(1 0 0 / 12%)",
+                color: "#E2E8F0",
+                fontFamily: "DM Sans, sans-serif",
+              }}
+              onFocus={(e) => {
+                e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+              }}
+              onBlur={(e) => {
+                e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+              }}
+            />
+          </div>
+
+          <div>
+            <label
+              className="block text-xs font-semibold mb-2 uppercase tracking-widest"
+              style={{ fontFamily: "Sora, sans-serif", color: "oklch(0.65 0.02 220)" }}
+            >
+              URL
+            </label>
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
+              style={{
+                background: "oklch(1 0 0 / 6%)",
+                border: "1px solid oklch(1 0 0 / 12%)",
+                color: "#E2E8F0",
+                fontFamily: "DM Sans, sans-serif",
+              }}
+              onFocus={(e) => {
+                e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+              }}
+              onBlur={(e) => {
+                e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+              }}
+            />
+          </div>
+
+          <div>
+            <label
+              className="block text-xs font-semibold mb-2 uppercase tracking-widest"
+              style={{ fontFamily: "Sora, sans-serif", color: "oklch(0.65 0.02 220)" }}
+            >
+              Description
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all resize-none"
+              style={{
+                background: "oklch(1 0 0 / 6%)",
+                border: "1px solid oklch(1 0 0 / 12%)",
+                color: "#E2E8F0",
+                fontFamily: "DM Sans, sans-serif",
+              }}
+              onFocus={(e) => {
+                e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+              }}
+              onBlur={(e) => {
+                e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3 mt-8">
+          <button
+            onClick={onDelete}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2"
+            style={{
+              background: "oklch(0.62 0.22 25 / 15%)",
+              color: "oklch(0.70 0.20 25)",
+              fontFamily: "Sora, sans-serif",
+            }}
+            onMouseEnter={(e) => {
+              (e.target as HTMLButtonElement).style.background = "oklch(0.62 0.22 25 / 25%)";
+            }}
+            onMouseLeave={(e) => {
+              (e.target as HTMLButtonElement).style.background = "oklch(0.62 0.22 25 / 15%)";
+            }}
+          >
+            <Trash2 size={14} />
+            Delete
+          </button>
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
+            style={{
+              background: "oklch(1 0 0 / 8%)",
+              color: "oklch(0.65 0.02 220)",
+              fontFamily: "Sora, sans-serif",
+            }}
+            onMouseEnter={(e) => {
+              (e.target as HTMLButtonElement).style.background = "oklch(1 0 0 / 12%)";
+            }}
+            onMouseLeave={(e) => {
+              (e.target as HTMLButtonElement).style.background = "oklch(1 0 0 / 8%)";
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!title.trim() || !url.trim()}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            style={{
+              background: "linear-gradient(135deg, oklch(0.65 0.18 200), oklch(0.55 0.20 215))",
+              color: "#0F172A",
+              fontFamily: "Sora, sans-serif",
+              boxShadow: "0 4px 20px oklch(0.65 0.18 200 / 30%)",
+            }}
+            onMouseEnter={(e) => {
+              (e.target as HTMLButtonElement).style.boxShadow =
+                "0 4px 30px oklch(0.65 0.18 200 / 50%)";
+            }}
+            onMouseLeave={(e) => {
+              (e.target as HTMLButtonElement).style.boxShadow =
+                "0 4px 20px oklch(0.65 0.18 200 / 30%)";
+            }}
+          >
+            <Save size={14} />
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Draggable Link Card ───────────────────────────────────────
 interface LinkCardProps {
   link: LinkItem;
@@ -144,25 +511,34 @@ interface LinkCardProps {
   onDragOver: (e: React.DragEvent<HTMLAnchorElement>) => void;
   onDrop: (e: React.DragEvent<HTMLAnchorElement>, linkId: string) => void;
   isDragging?: boolean;
+  isEditMode?: boolean;
+  onEdit?: (link: LinkItem) => void;
 }
 
-function LinkCard({ link, onDragStart, onDragOver, onDrop, isDragging }: LinkCardProps) {
+function LinkCard({ link, onDragStart, onDragOver, onDrop, isDragging, isEditMode, onEdit }: LinkCardProps) {
   const [imgError, setImgError] = useState(false);
 
   return (
     <a
-      href={link.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      draggable
-      onDragStart={(e) => onDragStart(e, link.id)}
-      onDragOver={onDragOver}
-      onDrop={(e) => onDrop(e, link.id)}
+      href={isEditMode ? undefined : link.url}
+      target={isEditMode ? undefined : "_blank"}
+      rel={isEditMode ? undefined : "noopener noreferrer"}
+      draggable={!isEditMode}
+      onDragStart={(e) => !isEditMode && onDragStart(e, link.id)}
+      onDragOver={(e) => !isEditMode && onDragOver(e)}
+      onDrop={(e) => !isEditMode && onDrop(e, link.id)}
+      onClick={(e) => {
+        if (isEditMode) {
+          e.preventDefault();
+          onEdit?.(link);
+        }
+      }}
       className="group block rounded-xl p-4 transition-all duration-200 animate-fade-in-up relative"
       style={{
         background: "oklch(1 0 0 / 4%)",
         border: "1px solid oklch(1 0 0 / 8%)",
         opacity: isDragging ? 0.5 : 1,
+        cursor: isEditMode ? "pointer" : "default",
       }}
       onMouseEnter={(e) => {
         const el = e.currentTarget;
@@ -179,16 +555,16 @@ function LinkCard({ link, onDragStart, onDragOver, onDrop, isDragging }: LinkCar
         el.style.transform = "translateY(0)";
       }}
     >
-      {/* Drag handle */}
+      {/* Drag handle or edit icon */}
       <div
         className="absolute top-2 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none"
         style={{
           background: "oklch(0.65 0.18 200 / 15%)",
           color: "oklch(0.65 0.18 200)",
         }}
-        title="Drag to reorder"
+        title={isEditMode ? "Click to edit" : "Drag to reorder"}
       >
-        <GripVertical size={14} />
+        {isEditMode ? <Edit2 size={14} /> : <GripVertical size={14} />}
       </div>
 
       <div className="flex items-start gap-3">
@@ -218,11 +594,13 @@ function LinkCard({ link, onDragStart, onDragOver, onDrop, isDragging }: LinkCar
             >
               {link.title}
             </span>
-            <ExternalLink
-              size={11}
-              className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-              style={{ color: "oklch(0.65 0.18 200)" }}
-            />
+            {!isEditMode && (
+              <ExternalLink
+                size={11}
+                className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+                style={{ color: "oklch(0.65 0.18 200)" }}
+              />
+            )}
           </div>
           <p
             className="text-xs leading-relaxed line-clamp-2"
@@ -426,6 +804,10 @@ function VaultPage({ onLock }: { onLock: () => void }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [draggedLinkId, setDraggedLinkId] = useState<string | null>(null);
   const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [editingLink, setEditingLink] = useState<LinkItem | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // Save to localStorage whenever vault data changes
   useEffect(() => {
@@ -466,6 +848,39 @@ function VaultPage({ onLock }: { onLock: () => void }) {
       : vaultData.find((f) => f.id === activeFolder)?.name ?? "";
 
   const activeFolderData = vaultData.find((f) => f.id === activeFolder);
+
+  // Handle admin unlock
+  const handleAdminUnlock = () => {
+    setIsEditMode(true);
+    setShowAdminModal(false);
+  };
+
+  // Handle edit link
+  const handleEditLink = (link: LinkItem) => {
+    setEditingLink(link);
+    setShowEditModal(true);
+  };
+
+  const handleSaveLink = (updatedLink: LinkItem) => {
+    const updatedFolders = vaultData.map((folder) => ({
+      ...folder,
+      links: folder.links.map((link) =>
+        link.id === updatedLink.id ? updatedLink : link
+      ),
+    }));
+    setVaultData(updatedFolders);
+    setShowEditModal(false);
+  };
+
+  const handleDeleteLink = () => {
+    if (!editingLink) return;
+    const updatedFolders = vaultData.map((folder) => ({
+      ...folder,
+      links: folder.links.filter((link) => link.id !== editingLink.id),
+    }));
+    setVaultData(updatedFolders);
+    setShowEditModal(false);
+  };
 
   // Handle link drag and drop
   const handleLinkDragStart = (e: React.DragEvent<HTMLAnchorElement>, linkId: string) => {
@@ -543,6 +958,22 @@ function VaultPage({ onLock }: { onLock: () => void }) {
       className="min-h-screen flex animate-unlock-reveal"
       style={{ background: "#0F172A" }}
     >
+      {/* Admin Password Modal */}
+      <AdminPasswordModal
+        isOpen={showAdminModal}
+        onClose={() => setShowAdminModal(false)}
+        onSuccess={handleAdminUnlock}
+      />
+
+      {/* Edit Link Modal */}
+      <EditLinkModal
+        isOpen={showEditModal}
+        link={editingLink}
+        onClose={() => setShowEditModal(false)}
+        onSave={handleSaveLink}
+        onDelete={handleDeleteLink}
+      />
+
       {/* Sidebar */}
       <aside
         className="flex-shrink-0 flex flex-col transition-all duration-300"
@@ -613,10 +1044,10 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                 <button
                   key={folder.id}
                   onClick={() => setActiveFolder(folder.id)}
-                  draggable
-                  onDragStart={(e) => handleFolderDragStart(e, folder.id)}
-                  onDragOver={handleFolderDragOver}
-                  onDrop={(e) => handleFolderDrop(e, folder.id)}
+                  draggable={!isEditMode}
+                  onDragStart={(e) => !isEditMode && handleFolderDragStart(e, folder.id)}
+                  onDragOver={(e) => !isEditMode && handleFolderDragOver(e)}
+                  onDrop={(e) => !isEditMode && handleFolderDrop(e, folder.id)}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 group"
                   style={{
                     background:
@@ -646,20 +1077,67 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                   >
                     {folder.links.length}
                   </span>
-                  <GripVertical
-                    size={12}
-                    className="opacity-0 group-hover:opacity-60 transition-opacity duration-150 flex-shrink-0"
-                    style={{ color: "oklch(0.65 0.18 200)" }}
-                  />
+                  {!isEditMode && (
+                    <GripVertical
+                      size={12}
+                      className="opacity-0 group-hover:opacity-60 transition-opacity duration-150 flex-shrink-0"
+                      style={{ color: "oklch(0.65 0.18 200)" }}
+                    />
+                  )}
                 </button>
               ))}
             </nav>
           </div>
 
           <div
-            className="p-4 mt-auto border-t"
+            className="p-4 mt-auto border-t space-y-2"
             style={{ borderColor: "oklch(1 0 0 / 8%)" }}
           >
+            <button
+              onClick={() => setShowAdminModal(true)}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+              style={{
+                background: isEditMode ? "oklch(0.65 0.18 200 / 15%)" : "oklch(1 0 0 / 4%)",
+                color: isEditMode ? "oklch(0.75 0.18 200)" : "oklch(0.55 0.02 220)",
+                fontFamily: "DM Sans, sans-serif",
+                border: isEditMode ? "1px solid oklch(0.65 0.18 200 / 30%)" : "1px solid transparent",
+              }}
+              onMouseEnter={(e) => {
+                if (!isEditMode) {
+                  (e.currentTarget as HTMLButtonElement).style.background = "oklch(1 0 0 / 8%)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isEditMode) {
+                  (e.currentTarget as HTMLButtonElement).style.background = "oklch(1 0 0 / 4%)";
+                }
+              }}
+            >
+              <Edit2 size={15} />
+              <span>{isEditMode ? "Edit Mode On" : "Edit Links"}</span>
+            </button>
+
+            {isEditMode && (
+              <button
+                onClick={() => setIsEditMode(false)}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+                style={{
+                  background: "oklch(0.62 0.22 25 / 12%)",
+                  color: "oklch(0.70 0.20 25)",
+                  fontFamily: "DM Sans, sans-serif",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.62 0.22 25 / 20%)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.62 0.22 25 / 12%)";
+                }}
+              >
+                <Check size={15} />
+                <span>Done Editing</span>
+              </button>
+            )}
+
             <button
               onClick={onLock}
               className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
@@ -751,45 +1229,59 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                 ? `${activeFolderData.icon} ${activeLabel}`
                 : activeLabel}
             </h2>
-          </div>
-
-          <div className="ml-auto relative max-w-xs w-full">
-            <Search
-              size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-              style={{ color: "oklch(0.50 0.02 220)" }}
-            />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search links…"
-              className="w-full pl-9 pr-9 py-2 rounded-lg text-sm outline-none transition-all duration-200"
-              style={{
-                background: "oklch(1 0 0 / 5%)",
-                border: "1px solid oklch(1 0 0 / 10%)",
-                color: "#E2E8F0",
-                fontFamily: "DM Sans, sans-serif",
-              }}
-              onFocus={(e) => {
-                e.target.style.border = "1px solid oklch(0.65 0.18 200 / 50%)";
-                e.target.style.boxShadow = "0 0 0 3px oklch(0.65 0.18 200 / 10%)";
-              }}
-              onBlur={(e) => {
-                e.target.style.border = "1px solid oklch(1 0 0 / 10%)";
-                e.target.style.boxShadow = "none";
-              }}
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2"
-                style={{ color: "oklch(0.50 0.02 220)" }}
+            {isEditMode && (
+              <span
+                className="ml-2 text-xs px-2 py-1 rounded-lg"
+                style={{
+                  background: "oklch(0.65 0.18 200 / 20%)",
+                  color: "oklch(0.75 0.18 200)",
+                  fontFamily: "Sora, sans-serif",
+                }}
               >
-                <X size={13} />
-              </button>
+                EDIT MODE
+              </span>
             )}
           </div>
+
+          {!isEditMode && (
+            <div className="ml-auto relative max-w-xs w-full">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                style={{ color: "oklch(0.50 0.02 220)" }}
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search links…"
+                className="w-full pl-9 pr-9 py-2 rounded-lg text-sm outline-none transition-all duration-200"
+                style={{
+                  background: "oklch(1 0 0 / 5%)",
+                  border: "1px solid oklch(1 0 0 / 10%)",
+                  color: "#E2E8F0",
+                  fontFamily: "DM Sans, sans-serif",
+                }}
+                onFocus={(e) => {
+                  e.target.style.border = "1px solid oklch(0.65 0.18 200 / 50%)";
+                  e.target.style.boxShadow = "0 0 0 3px oklch(0.65 0.18 200 / 10%)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.border = "1px solid oklch(1 0 0 / 10%)";
+                  e.target.style.boxShadow = "none";
+                }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                  style={{ color: "oklch(0.50 0.02 220)" }}
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          )}
         </header>
 
         {/* Link grid */}
@@ -804,7 +1296,7 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                 {searchQuery ? `No links found for "${searchQuery}"` : "No links in this folder"}
               </p>
             </div>
-          ) : activeFolder === "all" && !searchQuery ? (
+          ) : activeFolder === "all" && !searchQuery && !isEditMode ? (
             // All folders view — grouped
             <div className="space-y-8 stagger-children">
               {vaultData.map((folder) => (
@@ -853,9 +1345,9 @@ function VaultPage({ onLock }: { onLock: () => void }) {
               ))}
             </div>
           ) : (
-            // Filtered / single folder view
+            // Filtered / single folder view or edit mode
             <div>
-              {searchQuery && (
+              {searchQuery && !isEditMode && (
                 <p
                   className="text-xs mb-4"
                   style={{ color: "oklch(0.50 0.02 220)", fontFamily: "DM Sans, sans-serif" }}
@@ -872,6 +1364,8 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                     onDragOver={handleLinkDragOver}
                     onDrop={handleLinkDrop}
                     isDragging={draggedLinkId === link.id}
+                    isEditMode={isEditMode}
+                    onEdit={handleEditLink}
                   />
                 ))}
               </div>
