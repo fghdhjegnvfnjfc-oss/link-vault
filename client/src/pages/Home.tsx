@@ -3520,10 +3520,10 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
               className="text-3xl font-bold tracking-tight mb-2"
               style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
             >
-              Link Vault
+              Website Library
             </h1>
             <p className="text-sm" style={{ color: "oklch(0.60 0.02 220)" }}>
-              Enter your password to access the vault
+              Enter the vault password for access.
             </p>
           </div>
 
@@ -3630,7 +3630,7 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
             style={{ borderColor: "oklch(1 0 0 / 8%)" }}>
             <Shield size={12} style={{ color: "oklch(0.50 0.02 220)" }} />
             <p className="text-xs" style={{ color: "oklch(0.50 0.02 220)" }}>
-              Protected by Link Vault
+              Password Protected
             </p>
           </div>
         </div>
