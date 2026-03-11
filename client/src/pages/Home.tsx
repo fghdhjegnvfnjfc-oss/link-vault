@@ -4130,31 +4130,33 @@ function VaultPage({ onLock }: { onLock: () => void }) {
               </>
             )}
 
-            <button
-              onClick={() => setShowAdminModal(true)}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
-              style={{
-                background: isEditMode ? "oklch(0.65 0.18 200 / 15%)" : "oklch(1 0 0 / 4%)",
-                color: isEditMode ? "oklch(0.75 0.18 200)" : "oklch(0.55 0.02 220)",
-                fontFamily: "DM Sans, sans-serif",
-                border: isEditMode ? "1px solid oklch(0.65 0.18 200 / 30%)" : "1px solid transparent",
-              }}
-              onMouseEnter={(e) => {
-                if (!isEditMode) {
-                  (e.currentTarget as HTMLButtonElement).style.background = "oklch(1 0 0 / 8%)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isEditMode) {
-                  (e.currentTarget as HTMLButtonElement).style.background = "oklch(1 0 0 / 4%)";
-                }
-              }}
-            >
-              <Edit2 size={15} />
-              <span>{isEditMode ? "Edit Mode On" : "Edit Links"}</span>
-            </button>
+            {(currentAdminEmail || isOwnerMode) && (
+              <button
+                onClick={() => setIsEditMode(!isEditMode)}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+                style={{
+                  background: isEditMode ? "oklch(0.65 0.18 200 / 15%)" : "oklch(1 0 0 / 4%)",
+                  color: isEditMode ? "oklch(0.75 0.18 200)" : "oklch(0.55 0.02 220)",
+                  fontFamily: "DM Sans, sans-serif",
+                  border: isEditMode ? "1px solid oklch(0.65 0.18 200 / 30%)" : "1px solid transparent",
+                }}
+                onMouseEnter={(e) => {
+                  if (!isEditMode) {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(1 0 0 / 8%)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isEditMode) {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(1 0 0 / 4%)";
+                  }
+                }}
+              >
+                <Edit2 size={15} />
+                <span>{isEditMode ? "Edit Mode On" : "Edit Links"}</span>
+              </button>
+            )}
 
-            {isEditMode && (
+            {(currentAdminEmail || isOwnerMode) && isEditMode && (
               <button
                 onClick={() => setIsEditMode(false)}
                 className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
