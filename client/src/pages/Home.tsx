@@ -1,35 +1,17 @@
 /* =============================================================
-   LINK VAULT — Home Page with Drag-and-Drop Reordering
+   LINK VAULT — Home Page
    Design: Neo-Noir / Glassmorphism Dark
    - Lock screen: centered frosted glass card over mesh gradient bg
    - Vault page: sidebar folder nav + main link card grid
-   - Drag-and-drop: reorder links within folders and folders themselves
-   - Persistence: localStorage saves reordered state
+   - Cyan (#06B6D4) accent, Sora display font, DM Sans body
    ============================================================= */
 
-import { useState, useRef, useEffect, useMemo } from "react";
-import { Eye, EyeOff, Lock, Unlock, ExternalLink, Folder, FolderOpen, Search, X, ChevronRight, Shield, LogOut, GripVertical } from "lucide-react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { useState, useRef, useEffect } from "react";
+import { Eye, EyeOff, Lock, Unlock, ExternalLink, Folder, FolderOpen, Search, X, ChevronRight, Shield, LogOut } from "lucide-react";
 
 // ─── Configuration ────────────────────────────────────────────
+// Change VAULT_PASSWORD to set your own password
 const VAULT_PASSWORD = "vault2024";
-const STORAGE_KEY = "link-vault-data";
 
 // ─── Link Data ────────────────────────────────────────────────
 interface LinkItem {
@@ -48,7 +30,7 @@ interface FolderData {
   links: LinkItem[];
 }
 
-const DEFAULT_VAULT_DATA: FolderData[] = [
+const VAULT_DATA: FolderData[] = [
   {
     id: "productivity",
     name: "Productivity",
@@ -123,27 +105,6 @@ const DEFAULT_VAULT_DATA: FolderData[] = [
   },
 ];
 
-// ─── Storage helpers ──────────────────────────────────────────
-function loadVaultData(): FolderData[] {
-  if (typeof window === "undefined") return DEFAULT_VAULT_DATA;
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch (e) {
-    console.error("Failed to load vault data:", e);
-  }
-  return DEFAULT_VAULT_DATA;
-}
-
-function saveVaultData(data: FolderData[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch (e) {
-    console.error("Failed to save vault data:", e);
-  }
-}
-
 // ─── Favicon helper ───────────────────────────────────────────
 function getFaviconUrl(url: string): string {
   try {
@@ -152,163 +113,6 @@ function getFaviconUrl(url: string): string {
   } catch {
     return "";
   }
-}
-
-// ─── Draggable Link Card ───────────────────────────────────────
-interface DraggableLinkCardProps {
-  link: LinkItem;
-  isDragging?: boolean;
-}
-
-function DraggableLinkCard({ link, isDragging }: DraggableLinkCardProps) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
-    id: link.id,
-  });
-  const [imgError, setImgError] = useState(false);
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
-  return (
-      <a
-      ref={setNodeRef}
-      href={link.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group block rounded-xl p-4 transition-all duration-200 animate-fade-in-up relative"
-      style={{
-        ...style,
-        background: "oklch(1 0 0 / 4%)",
-        border: "1px solid oklch(1 0 0 / 8%)",
-      } as React.CSSProperties}
-      onMouseEnter={(e) => {
-        const el = e.currentTarget;
-        el.style.background = "oklch(1 0 0 / 7%)";
-        el.style.border = "1px solid oklch(0.65 0.18 200 / 35%)";
-        el.style.boxShadow = "0 4px 20px oklch(0.65 0.18 200 / 12%)";
-        el.style.transform = "translateY(-2px)";
-      }}
-      onMouseLeave={(e) => {
-        const el = e.currentTarget;
-        el.style.background = "oklch(1 0 0 / 4%)";
-        el.style.border = "1px solid oklch(1 0 0 / 8%)";
-        el.style.boxShadow = "none";
-        el.style.transform = "translateY(0)";
-      }}
-    >
-      {/* Drag handle */}
-      <button
-        {...attributes}
-        {...listeners}
-        className="absolute top-2 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 cursor-grab active:cursor-grabbing"
-        style={{
-          background: "oklch(0.65 0.18 200 / 15%)",
-          color: "oklch(0.65 0.18 200)",
-        }}
-        title="Drag to reorder"
-      >
-        <GripVertical size={14} />
-      </button>
-
-      <div className="flex items-start gap-3">
-        {/* Favicon */}
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 overflow-hidden"
-          style={{ background: "oklch(1 0 0 / 8%)" }}
-        >
-          {!imgError ? (
-            <img
-              src={getFaviconUrl(link.url)}
-              alt=""
-              className="w-4 h-4 object-contain"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <ExternalLink size={14} style={{ color: "oklch(0.65 0.18 200)" }} />
-          )}
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <span
-              className="text-sm font-semibold truncate"
-              style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
-            >
-              {link.title}
-            </span>
-            <ExternalLink
-              size={11}
-              className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-              style={{ color: "oklch(0.65 0.18 200)" }}
-            />
-          </div>
-          <p
-            className="text-xs leading-relaxed line-clamp-2"
-            style={{ color: "oklch(0.55 0.02 220)" }}
-          >
-            {link.description}
-          </p>
-        </div>
-      </div>
-    </a>
-  );
-}
-
-// ─── Draggable Folder Button ───────────────────────────────────
-interface DraggableFolderButtonProps {
-  folder: FolderData;
-  isActive: boolean;
-  linkCount: number;
-  onClick: () => void;
-}
-
-function DraggableFolderButton({
-  folder,
-  isActive,
-  linkCount,
-  onClick,
-}: DraggableFolderButtonProps) {
-  const { attributes, listeners, setNodeRef, isDragging } = useSortable({
-    id: folder.id,
-  });
-
-  return (
-    <button
-      ref={setNodeRef}
-      onClick={onClick}
-      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 group"
-      style={{
-        background: isActive ? "oklch(0.65 0.18 200 / 15%)" : "transparent",
-        border: isActive ? "1px solid oklch(0.65 0.18 200 / 30%)" : "1px solid transparent",
-        color: isActive ? "oklch(0.75 0.18 200)" : "oklch(0.65 0.02 220)",
-        fontFamily: "DM Sans, sans-serif",
-        opacity: isDragging ? 0.5 : 1,
-      }}
-      {...attributes}
-      {...listeners}
-    >
-      <span className="text-base leading-none">{folder.icon}</span>
-      <span className="font-medium truncate flex-1 text-left">{folder.name}</span>
-      <span
-        className="ml-auto text-xs px-1.5 py-0.5 rounded-md flex-shrink-0"
-        style={{
-          background: "oklch(1 0 0 / 8%)",
-          color: "oklch(0.55 0.02 220)",
-        }}
-      >
-        {linkCount}
-      </span>
-      <GripVertical
-        size={12}
-        className="opacity-0 group-hover:opacity-60 transition-opacity duration-150 flex-shrink-0"
-        style={{ color: "oklch(0.65 0.18 200)" }}
-      />
-    </button>
-  );
 }
 
 // ─── Lock Screen ─────────────────────────────────────────────
@@ -329,6 +133,7 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
     if (!password.trim()) return;
 
     setIsLoading(true);
+    // Simulate a brief check delay for UX polish
     await new Promise((r) => setTimeout(r, 350));
 
     if (password === VAULT_PASSWORD) {
@@ -353,22 +158,30 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
         backgroundPosition: "center",
       }}
     >
+      {/* Overlay */}
       <div className="absolute inset-0 bg-[#0F172A]/60" />
 
+      {/* Floating orbs */}
       <div className="absolute top-1/4 left-1/6 w-64 h-64 rounded-full opacity-10 blur-3xl"
         style={{ background: "radial-gradient(circle, #06B6D4, transparent)" }} />
       <div className="absolute bottom-1/4 right-1/6 w-80 h-80 rounded-full opacity-8 blur-3xl"
         style={{ background: "radial-gradient(circle, #312E81, transparent)" }} />
 
-      <div className={`relative z-10 w-full max-w-md animate-fade-in-up ${isShaking ? "shake" : ""}`}>
+      {/* Lock card */}
+      <div
+        className={`relative z-10 w-full max-w-md animate-fade-in-up ${isShaking ? "shake" : ""}`}
+      >
         <div className="glass-card-strong rounded-2xl p-8 md:p-10">
+          {/* Header */}
           <div className="text-center mb-8">
             <div className="flex justify-center mb-5">
-              <img
-                src="https://d2xsxph8kpxj0f.cloudfront.net/310519663426870855/MTnGojgUB5HzdQARgKvcKo/vault-lock-icon-6PZsayaWfgxkZyGh8B2aGr.webp"
-                alt="Vault Lock"
-                className="w-16 h-16 object-contain"
-              />
+              <div className="relative">
+                <img
+                  src="https://d2xsxph8kpxj0f.cloudfront.net/310519663426870855/MTnGojgUB5HzdQARgKvcKo/vault-lock-icon-6PZsayaWfgxkZyGh8B2aGr.webp"
+                  alt="Vault Lock"
+                  className="w-16 h-16 object-contain"
+                />
+              </div>
             </div>
             <h1
               className="text-3xl font-bold tracking-tight mb-2"
@@ -381,6 +194,7 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
             </p>
           </div>
 
+          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="relative">
               <input
@@ -428,6 +242,7 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
               </button>
             </div>
 
+            {/* Error message */}
             {error && (
               <p
                 className="text-xs flex items-center gap-1.5 animate-fade-in"
@@ -438,6 +253,7 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
               </p>
             )}
 
+            {/* Submit button */}
             <button
               type="submit"
               disabled={isLoading || !password.trim()}
@@ -480,6 +296,7 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
             </button>
           </form>
 
+          {/* Footer hint */}
           <div className="mt-6 pt-5 border-t flex items-center justify-center gap-2"
             style={{ borderColor: "oklch(1 0 0 / 8%)" }}>
             <Shield size={12} style={{ color: "oklch(0.50 0.02 220)" }} />
@@ -493,29 +310,89 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
   );
 }
 
+// ─── Link Card ────────────────────────────────────────────────
+function LinkCard({ link }: { link: LinkItem }) {
+  const [imgError, setImgError] = useState(false);
+
+  return (
+    <a
+      href={link.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group block rounded-xl p-4 transition-all duration-200 animate-fade-in-up"
+      style={{
+        background: "oklch(1 0 0 / 4%)",
+        border: "1px solid oklch(1 0 0 / 8%)",
+      }}
+      onMouseEnter={(e) => {
+        const el = e.currentTarget;
+        el.style.background = "oklch(1 0 0 / 7%)";
+        el.style.border = "1px solid oklch(0.65 0.18 200 / 35%)";
+        el.style.boxShadow = "0 4px 20px oklch(0.65 0.18 200 / 12%)";
+        el.style.transform = "translateY(-2px)";
+      }}
+      onMouseLeave={(e) => {
+        const el = e.currentTarget;
+        el.style.background = "oklch(1 0 0 / 4%)";
+        el.style.border = "1px solid oklch(1 0 0 / 8%)";
+        el.style.boxShadow = "none";
+        el.style.transform = "translateY(0)";
+      }}
+    >
+      <div className="flex items-start gap-3">
+        {/* Favicon */}
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 overflow-hidden"
+          style={{ background: "oklch(1 0 0 / 8%)" }}
+        >
+          {!imgError ? (
+            <img
+              src={getFaviconUrl(link.url)}
+              alt=""
+              className="w-4 h-4 object-contain"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <ExternalLink size={14} style={{ color: "oklch(0.65 0.18 200)" }} />
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span
+              className="text-sm font-semibold truncate"
+              style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+            >
+              {link.title}
+            </span>
+            <ExternalLink
+              size={11}
+              className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+              style={{ color: "oklch(0.65 0.18 200)" }}
+            />
+          </div>
+          <p
+            className="text-xs leading-relaxed line-clamp-2"
+            style={{ color: "oklch(0.55 0.02 220)" }}
+          >
+            {link.description}
+          </p>
+        </div>
+      </div>
+    </a>
+  );
+}
+
 // ─── Vault Page ───────────────────────────────────────────────
 function VaultPage({ onLock }: { onLock: () => void }) {
-  const [vaultData, setVaultData] = useState<FolderData[]>(loadVaultData);
   const [activeFolder, setActiveFolder] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
+  const allLinks = VAULT_DATA.flatMap((f) => f.links.map((l) => ({ ...l, folderId: f.id })));
 
-  // Save to localStorage whenever vault data changes
-  useEffect(() => {
-    saveVaultData(vaultData);
-  }, [vaultData]);
-
-  const allLinks = useMemo(
-    () => vaultData.flatMap((f) => f.links.map((l) => ({ ...l, folderId: f.id }))),
-    [vaultData]
-  );
-
-  const filteredLinks = useMemo(() => {
+  const filteredLinks = (() => {
     const q = searchQuery.toLowerCase().trim();
     if (activeFolder === "all") {
       if (!q) return allLinks;
@@ -526,7 +403,7 @@ function VaultPage({ onLock }: { onLock: () => void }) {
           l.url.toLowerCase().includes(q)
       );
     }
-    const folder = vaultData.find((f) => f.id === activeFolder);
+    const folder = VAULT_DATA.find((f) => f.id === activeFolder);
     if (!folder) return [];
     const links = folder.links.map((l) => ({ ...l, folderId: folder.id }));
     if (!q) return links;
@@ -536,51 +413,14 @@ function VaultPage({ onLock }: { onLock: () => void }) {
         l.description.toLowerCase().includes(q) ||
         l.url.toLowerCase().includes(q)
     );
-  }, [vaultData, activeFolder, searchQuery, allLinks]);
+  })();
 
   const activeLabel =
     activeFolder === "all"
       ? "All Links"
-      : vaultData.find((f) => f.id === activeFolder)?.name ?? "";
+      : VAULT_DATA.find((f) => f.id === activeFolder)?.name ?? "";
 
-  const activeFolderData = vaultData.find((f) => f.id === activeFolder);
-
-  // Handle folder reordering
-  const handleFolderDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    const oldIndex = vaultData.findIndex((f) => f.id === active.id);
-    const newIndex = vaultData.findIndex((f) => f.id === over.id);
-
-    if (oldIndex !== -1 && newIndex !== -1) {
-      setVaultData(arrayMove(vaultData, oldIndex, newIndex));
-    }
-  };
-
-  // Handle link reordering within a folder
-  const handleLinkDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    const folder = vaultData.find((f) => f.id === activeFolder);
-    if (!folder) return;
-
-    const oldIndex = folder.links.findIndex((l) => l.id === active.id);
-    const newIndex = folder.links.findIndex((l) => l.id === over.id);
-
-    if (oldIndex !== -1 && newIndex !== -1) {
-      const updatedFolders = vaultData.map((f) =>
-        f.id === activeFolder
-          ? { ...f, links: arrayMove(f.links, oldIndex, newIndex) }
-          : f
-      );
-      setVaultData(updatedFolders);
-    }
-  };
-
-  const linkIds = useMemo(() => filteredLinks.map((l) => l.id), [filteredLinks]);
-  const folderIds = useMemo(() => vaultData.map((f) => f.id), [vaultData]);
+  const activeFolderData = VAULT_DATA.find((f) => f.id === activeFolder);
 
   return (
     <div
@@ -598,6 +438,7 @@ function VaultPage({ onLock }: { onLock: () => void }) {
         }}
       >
         <div style={{ width: "260px" }}>
+          {/* Sidebar header */}
           <div className="p-5 pb-4">
             <div className="flex items-center gap-2.5 mb-6">
               <img
@@ -613,6 +454,7 @@ function VaultPage({ onLock }: { onLock: () => void }) {
               </span>
             </div>
 
+            {/* All links item */}
             <button
               onClick={() => setActiveFolder("all")}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 mb-1"
@@ -645,6 +487,7 @@ function VaultPage({ onLock }: { onLock: () => void }) {
               </span>
             </button>
 
+            {/* Divider */}
             <div
               className="my-3 text-xs font-semibold uppercase tracking-widest px-3"
               style={{ color: "oklch(0.45 0.02 220)", fontFamily: "Sora, sans-serif" }}
@@ -652,31 +495,46 @@ function VaultPage({ onLock }: { onLock: () => void }) {
               Folders
             </div>
 
-            {/* Draggable folder list */}
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleFolderDragEnd}
-            >
-              <SortableContext
-                items={folderIds}
-                strategy={verticalListSortingStrategy}
-              >
-                <nav className="space-y-0.5">
-                  {vaultData.map((folder) => (
-                    <DraggableFolderButton
-                      key={folder.id}
-                      folder={folder}
-                      isActive={activeFolder === folder.id}
-                      linkCount={folder.links.length}
-                      onClick={() => setActiveFolder(folder.id)}
-                    />
-                  ))}
-                </nav>
-              </SortableContext>
-            </DndContext>
+            {/* Folder list */}
+            <nav className="space-y-0.5">
+              {VAULT_DATA.map((folder) => (
+                <button
+                  key={folder.id}
+                  onClick={() => setActiveFolder(folder.id)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+                  style={{
+                    background:
+                      activeFolder === folder.id
+                        ? "oklch(0.65 0.18 200 / 15%)"
+                        : "transparent",
+                    border:
+                      activeFolder === folder.id
+                        ? "1px solid oklch(0.65 0.18 200 / 30%)"
+                        : "1px solid transparent",
+                    color:
+                      activeFolder === folder.id
+                        ? "oklch(0.75 0.18 200)"
+                        : "oklch(0.65 0.02 220)",
+                    fontFamily: "DM Sans, sans-serif",
+                  }}
+                >
+                  <span className="text-base leading-none">{folder.icon}</span>
+                  <span className="font-medium truncate">{folder.name}</span>
+                  <span
+                    className="ml-auto text-xs px-1.5 py-0.5 rounded-md flex-shrink-0"
+                    style={{
+                      background: "oklch(1 0 0 / 8%)",
+                      color: "oklch(0.55 0.02 220)",
+                    }}
+                  >
+                    {folder.links.length}
+                  </span>
+                </button>
+              ))}
+            </nav>
           </div>
 
+          {/* Sidebar footer — lock button */}
           <div
             className="p-4 mt-auto border-t"
             style={{ borderColor: "oklch(1 0 0 / 8%)" }}
@@ -714,6 +572,7 @@ function VaultPage({ onLock }: { onLock: () => void }) {
           className="flex items-center gap-4 px-6 py-4 flex-shrink-0"
           style={{ borderBottom: "1px solid oklch(1 0 0 / 8%)" }}
         >
+          {/* Sidebar toggle */}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="p-2 rounded-lg transition-all duration-150"
@@ -743,6 +602,7 @@ function VaultPage({ onLock }: { onLock: () => void }) {
             />
           </button>
 
+          {/* Breadcrumb */}
           <div className="flex items-center gap-2">
             {activeFolder !== "all" && activeFolderData && (
               <>
@@ -774,6 +634,7 @@ function VaultPage({ onLock }: { onLock: () => void }) {
             </h2>
           </div>
 
+          {/* Search */}
           <div className="ml-auto relative max-w-xs w-full">
             <Search
               size={14}
@@ -828,7 +689,7 @@ function VaultPage({ onLock }: { onLock: () => void }) {
           ) : activeFolder === "all" && !searchQuery ? (
             // All folders view — grouped
             <div className="space-y-8 stagger-children">
-              {vaultData.map((folder) => (
+              {VAULT_DATA.map((folder) => (
                 <section key={folder.id}>
                   <button
                     onClick={() => setActiveFolder(folder.id)}
@@ -861,39 +722,29 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                   </button>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                     {folder.links.map((link) => (
-                      <DraggableLinkCard key={link.id} link={link} />
+                      <LinkCard key={link.id} link={link} />
                     ))}
                   </div>
                 </section>
               ))}
             </div>
           ) : (
-            // Filtered / single folder view with drag-and-drop
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleLinkDragEnd}
-            >
-            <SortableContext
-              items={linkIds}
-            >
-                <div>
-                  {searchQuery && (
-                    <p
-                      className="text-xs mb-4"
-                      style={{ color: "oklch(0.50 0.02 220)", fontFamily: "DM Sans, sans-serif" }}
-                    >
-                      {filteredLinks.length} result{filteredLinks.length !== 1 ? "s" : ""} for &ldquo;{searchQuery}&rdquo;
-                    </p>
-                  )}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 stagger-children">
-                    {filteredLinks.map((link, idx) => (
-                      <DraggableLinkCard key={`${link.id}-${idx}`} link={link} />
-                    ))}
-                  </div>
-                </div>
-              </SortableContext>
-            </DndContext>
+            // Filtered / single folder view
+            <div>
+              {searchQuery && (
+                <p
+                  className="text-xs mb-4"
+                  style={{ color: "oklch(0.50 0.02 220)", fontFamily: "DM Sans, sans-serif" }}
+                >
+                  {filteredLinks.length} result{filteredLinks.length !== 1 ? "s" : ""} for &ldquo;{searchQuery}&rdquo;
+                </p>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 stagger-children">
+                {filteredLinks.map((link) => (
+                  <LinkCard key={link.id} link={link} />
+                ))}
+              </div>
+            </div>
           )}
         </main>
       </div>
