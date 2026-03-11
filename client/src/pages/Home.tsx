@@ -1,17 +1,18 @@
 /* =============================================================
-   LINK VAULT — Home Page
+   LINK VAULT — Home Page with Drag-and-Drop Reordering
    Design: Neo-Noir / Glassmorphism Dark
    - Lock screen: centered frosted glass card over mesh gradient bg
    - Vault page: sidebar folder nav + main link card grid
-   - Cyan (#06B6D4) accent, Sora display font, DM Sans body
+   - Drag-and-drop: reorder links within folders and folders themselves
+   - Persistence: localStorage saves reordered state
    ============================================================= */
 
-import { useState, useRef, useEffect } from "react";
-import { Eye, EyeOff, Lock, Unlock, ExternalLink, Folder, FolderOpen, Search, X, ChevronRight, Shield, LogOut } from "lucide-react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { Eye, EyeOff, Lock, Unlock, ExternalLink, Folder, FolderOpen, Search, X, ChevronRight, Shield, LogOut, GripVertical } from "lucide-react";
 
 // ─── Configuration ────────────────────────────────────────────
-// Change VAULT_PASSWORD to set your own password
 const VAULT_PASSWORD = "vault2024";
+const STORAGE_KEY = "link-vault-data";
 
 // ─── Link Data ────────────────────────────────────────────────
 interface LinkItem {
@@ -30,7 +31,7 @@ interface FolderData {
   links: LinkItem[];
 }
 
-const VAULT_DATA: FolderData[] = [
+const DEFAULT_VAULT_DATA: FolderData[] = [
   {
     id: "productivity",
     name: "Productivity",
@@ -105,6 +106,27 @@ const VAULT_DATA: FolderData[] = [
   },
 ];
 
+// ─── Storage helpers ──────────────────────────────────────────
+function loadVaultData(): FolderData[] {
+  if (typeof window === "undefined") return DEFAULT_VAULT_DATA;
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch (e) {
+    console.error("Failed to load vault data:", e);
+  }
+  return DEFAULT_VAULT_DATA;
+}
+
+function saveVaultData(data: FolderData[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.error("Failed to save vault data:", e);
+  }
+}
+
 // ─── Favicon helper ───────────────────────────────────────────
 function getFaviconUrl(url: string): string {
   try {
@@ -113,6 +135,105 @@ function getFaviconUrl(url: string): string {
   } catch {
     return "";
   }
+}
+
+// ─── Draggable Link Card ───────────────────────────────────────
+interface LinkCardProps {
+  link: LinkItem;
+  onDragStart: (e: React.DragEvent<HTMLAnchorElement>, linkId: string) => void;
+  onDragOver: (e: React.DragEvent<HTMLAnchorElement>) => void;
+  onDrop: (e: React.DragEvent<HTMLAnchorElement>, linkId: string) => void;
+  isDragging?: boolean;
+}
+
+function LinkCard({ link, onDragStart, onDragOver, onDrop, isDragging }: LinkCardProps) {
+  const [imgError, setImgError] = useState(false);
+
+  return (
+    <a
+      href={link.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      draggable
+      onDragStart={(e) => onDragStart(e, link.id)}
+      onDragOver={onDragOver}
+      onDrop={(e) => onDrop(e, link.id)}
+      className="group block rounded-xl p-4 transition-all duration-200 animate-fade-in-up relative"
+      style={{
+        background: "oklch(1 0 0 / 4%)",
+        border: "1px solid oklch(1 0 0 / 8%)",
+        opacity: isDragging ? 0.5 : 1,
+      }}
+      onMouseEnter={(e) => {
+        const el = e.currentTarget;
+        el.style.background = "oklch(1 0 0 / 7%)";
+        el.style.border = "1px solid oklch(0.65 0.18 200 / 35%)";
+        el.style.boxShadow = "0 4px 20px oklch(0.65 0.18 200 / 12%)";
+        el.style.transform = "translateY(-2px)";
+      }}
+      onMouseLeave={(e) => {
+        const el = e.currentTarget;
+        el.style.background = "oklch(1 0 0 / 4%)";
+        el.style.border = "1px solid oklch(1 0 0 / 8%)";
+        el.style.boxShadow = "none";
+        el.style.transform = "translateY(0)";
+      }}
+    >
+      {/* Drag handle */}
+      <div
+        className="absolute top-2 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none"
+        style={{
+          background: "oklch(0.65 0.18 200 / 15%)",
+          color: "oklch(0.65 0.18 200)",
+        }}
+        title="Drag to reorder"
+      >
+        <GripVertical size={14} />
+      </div>
+
+      <div className="flex items-start gap-3">
+        {/* Favicon */}
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 overflow-hidden"
+          style={{ background: "oklch(1 0 0 / 8%)" }}
+        >
+          {!imgError ? (
+            <img
+              src={getFaviconUrl(link.url)}
+              alt=""
+              className="w-4 h-4 object-contain"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <ExternalLink size={14} style={{ color: "oklch(0.65 0.18 200)" }} />
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span
+              className="text-sm font-semibold truncate"
+              style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+            >
+              {link.title}
+            </span>
+            <ExternalLink
+              size={11}
+              className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+              style={{ color: "oklch(0.65 0.18 200)" }}
+            />
+          </div>
+          <p
+            className="text-xs leading-relaxed line-clamp-2"
+            style={{ color: "oklch(0.55 0.02 220)" }}
+          >
+            {link.description}
+          </p>
+        </div>
+      </div>
+    </a>
+  );
 }
 
 // ─── Lock Screen ─────────────────────────────────────────────
@@ -133,7 +254,6 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
     if (!password.trim()) return;
 
     setIsLoading(true);
-    // Simulate a brief check delay for UX polish
     await new Promise((r) => setTimeout(r, 350));
 
     if (password === VAULT_PASSWORD) {
@@ -158,30 +278,22 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
         backgroundPosition: "center",
       }}
     >
-      {/* Overlay */}
       <div className="absolute inset-0 bg-[#0F172A]/60" />
 
-      {/* Floating orbs */}
       <div className="absolute top-1/4 left-1/6 w-64 h-64 rounded-full opacity-10 blur-3xl"
         style={{ background: "radial-gradient(circle, #06B6D4, transparent)" }} />
       <div className="absolute bottom-1/4 right-1/6 w-80 h-80 rounded-full opacity-8 blur-3xl"
         style={{ background: "radial-gradient(circle, #312E81, transparent)" }} />
 
-      {/* Lock card */}
-      <div
-        className={`relative z-10 w-full max-w-md animate-fade-in-up ${isShaking ? "shake" : ""}`}
-      >
+      <div className={`relative z-10 w-full max-w-md animate-fade-in-up ${isShaking ? "shake" : ""}`}>
         <div className="glass-card-strong rounded-2xl p-8 md:p-10">
-          {/* Header */}
           <div className="text-center mb-8">
             <div className="flex justify-center mb-5">
-              <div className="relative">
-                <img
-                  src="https://d2xsxph8kpxj0f.cloudfront.net/310519663426870855/MTnGojgUB5HzdQARgKvcKo/vault-lock-icon-6PZsayaWfgxkZyGh8B2aGr.webp"
-                  alt="Vault Lock"
-                  className="w-16 h-16 object-contain"
-                />
-              </div>
+              <img
+                src="https://d2xsxph8kpxj0f.cloudfront.net/310519663426870855/MTnGojgUB5HzdQARgKvcKo/vault-lock-icon-6PZsayaWfgxkZyGh8B2aGr.webp"
+                alt="Vault Lock"
+                className="w-16 h-16 object-contain"
+              />
             </div>
             <h1
               className="text-3xl font-bold tracking-tight mb-2"
@@ -194,7 +306,6 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
             </p>
           </div>
 
-          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="relative">
               <input
@@ -242,7 +353,6 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
               </button>
             </div>
 
-            {/* Error message */}
             {error && (
               <p
                 className="text-xs flex items-center gap-1.5 animate-fade-in"
@@ -253,7 +363,6 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
               </p>
             )}
 
-            {/* Submit button */}
             <button
               type="submit"
               disabled={isLoading || !password.trim()}
@@ -296,7 +405,6 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
             </button>
           </form>
 
-          {/* Footer hint */}
           <div className="mt-6 pt-5 border-t flex items-center justify-center gap-2"
             style={{ borderColor: "oklch(1 0 0 / 8%)" }}>
             <Shield size={12} style={{ color: "oklch(0.50 0.02 220)" }} />
@@ -310,89 +418,26 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
   );
 }
 
-// ─── Link Card ────────────────────────────────────────────────
-function LinkCard({ link }: { link: LinkItem }) {
-  const [imgError, setImgError] = useState(false);
-
-  return (
-    <a
-      href={link.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group block rounded-xl p-4 transition-all duration-200 animate-fade-in-up"
-      style={{
-        background: "oklch(1 0 0 / 4%)",
-        border: "1px solid oklch(1 0 0 / 8%)",
-      }}
-      onMouseEnter={(e) => {
-        const el = e.currentTarget;
-        el.style.background = "oklch(1 0 0 / 7%)";
-        el.style.border = "1px solid oklch(0.65 0.18 200 / 35%)";
-        el.style.boxShadow = "0 4px 20px oklch(0.65 0.18 200 / 12%)";
-        el.style.transform = "translateY(-2px)";
-      }}
-      onMouseLeave={(e) => {
-        const el = e.currentTarget;
-        el.style.background = "oklch(1 0 0 / 4%)";
-        el.style.border = "1px solid oklch(1 0 0 / 8%)";
-        el.style.boxShadow = "none";
-        el.style.transform = "translateY(0)";
-      }}
-    >
-      <div className="flex items-start gap-3">
-        {/* Favicon */}
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 overflow-hidden"
-          style={{ background: "oklch(1 0 0 / 8%)" }}
-        >
-          {!imgError ? (
-            <img
-              src={getFaviconUrl(link.url)}
-              alt=""
-              className="w-4 h-4 object-contain"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <ExternalLink size={14} style={{ color: "oklch(0.65 0.18 200)" }} />
-          )}
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <span
-              className="text-sm font-semibold truncate"
-              style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
-            >
-              {link.title}
-            </span>
-            <ExternalLink
-              size={11}
-              className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
-              style={{ color: "oklch(0.65 0.18 200)" }}
-            />
-          </div>
-          <p
-            className="text-xs leading-relaxed line-clamp-2"
-            style={{ color: "oklch(0.55 0.02 220)" }}
-          >
-            {link.description}
-          </p>
-        </div>
-      </div>
-    </a>
-  );
-}
-
 // ─── Vault Page ───────────────────────────────────────────────
 function VaultPage({ onLock }: { onLock: () => void }) {
+  const [vaultData, setVaultData] = useState<FolderData[]>(loadVaultData);
   const [activeFolder, setActiveFolder] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [draggedLinkId, setDraggedLinkId] = useState<string | null>(null);
+  const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null);
 
-  const allLinks = VAULT_DATA.flatMap((f) => f.links.map((l) => ({ ...l, folderId: f.id })));
+  // Save to localStorage whenever vault data changes
+  useEffect(() => {
+    saveVaultData(vaultData);
+  }, [vaultData]);
 
-  const filteredLinks = (() => {
+  const allLinks = useMemo(
+    () => vaultData.flatMap((f) => f.links.map((l) => ({ ...l, folderId: f.id }))),
+    [vaultData]
+  );
+
+  const filteredLinks = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     if (activeFolder === "all") {
       if (!q) return allLinks;
@@ -403,7 +448,7 @@ function VaultPage({ onLock }: { onLock: () => void }) {
           l.url.toLowerCase().includes(q)
       );
     }
-    const folder = VAULT_DATA.find((f) => f.id === activeFolder);
+    const folder = vaultData.find((f) => f.id === activeFolder);
     if (!folder) return [];
     const links = folder.links.map((l) => ({ ...l, folderId: folder.id }));
     if (!q) return links;
@@ -413,14 +458,85 @@ function VaultPage({ onLock }: { onLock: () => void }) {
         l.description.toLowerCase().includes(q) ||
         l.url.toLowerCase().includes(q)
     );
-  })();
+  }, [vaultData, activeFolder, searchQuery, allLinks]);
 
   const activeLabel =
     activeFolder === "all"
       ? "All Links"
-      : VAULT_DATA.find((f) => f.id === activeFolder)?.name ?? "";
+      : vaultData.find((f) => f.id === activeFolder)?.name ?? "";
 
-  const activeFolderData = VAULT_DATA.find((f) => f.id === activeFolder);
+  const activeFolderData = vaultData.find((f) => f.id === activeFolder);
+
+  // Handle link drag and drop
+  const handleLinkDragStart = (e: React.DragEvent<HTMLAnchorElement>, linkId: string) => {
+    e.preventDefault();
+    setDraggedLinkId(linkId);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleLinkDragOver = (e: React.DragEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleLinkDrop = (e: React.DragEvent<HTMLAnchorElement>, targetLinkId: string) => {
+    e.preventDefault();
+    if (!draggedLinkId || draggedLinkId === targetLinkId) {
+      setDraggedLinkId(null);
+      return;
+    }
+
+    const folder = vaultData.find((f) => f.id === activeFolder);
+    if (!folder) return;
+
+    const draggedIndex = folder.links.findIndex((l) => l.id === draggedLinkId);
+    const targetIndex = folder.links.findIndex((l) => l.id === targetLinkId);
+
+    if (draggedIndex !== -1 && targetIndex !== -1) {
+      const newLinks = [...folder.links];
+      const [draggedLink] = newLinks.splice(draggedIndex, 1);
+      newLinks.splice(targetIndex, 0, draggedLink);
+
+      const updatedFolders = vaultData.map((f) =>
+        f.id === activeFolder ? { ...f, links: newLinks } : f
+      );
+      setVaultData(updatedFolders);
+    }
+
+    setDraggedLinkId(null);
+  };
+
+  // Handle folder drag and drop
+  const handleFolderDragStart = (e: React.DragEvent<HTMLButtonElement>, folderId: string) => {
+    e.preventDefault();
+    setDraggedFolderId(folderId);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleFolderDragOver = (e: React.DragEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleFolderDrop = (e: React.DragEvent<HTMLButtonElement>, targetFolderId: string) => {
+    e.preventDefault();
+    if (!draggedFolderId || draggedFolderId === targetFolderId) {
+      setDraggedFolderId(null);
+      return;
+    }
+
+    const draggedIndex = vaultData.findIndex((f) => f.id === draggedFolderId);
+    const targetIndex = vaultData.findIndex((f) => f.id === targetFolderId);
+
+    if (draggedIndex !== -1 && targetIndex !== -1) {
+      const newFolders = [...vaultData];
+      const [draggedFolder] = newFolders.splice(draggedIndex, 1);
+      newFolders.splice(targetIndex, 0, draggedFolder);
+      setVaultData(newFolders);
+    }
+
+    setDraggedFolderId(null);
+  };
 
   return (
     <div
@@ -438,7 +554,6 @@ function VaultPage({ onLock }: { onLock: () => void }) {
         }}
       >
         <div style={{ width: "260px" }}>
-          {/* Sidebar header */}
           <div className="p-5 pb-4">
             <div className="flex items-center gap-2.5 mb-6">
               <img
@@ -454,7 +569,6 @@ function VaultPage({ onLock }: { onLock: () => void }) {
               </span>
             </div>
 
-            {/* All links item */}
             <button
               onClick={() => setActiveFolder("all")}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 mb-1"
@@ -487,7 +601,6 @@ function VaultPage({ onLock }: { onLock: () => void }) {
               </span>
             </button>
 
-            {/* Divider */}
             <div
               className="my-3 text-xs font-semibold uppercase tracking-widest px-3"
               style={{ color: "oklch(0.45 0.02 220)", fontFamily: "Sora, sans-serif" }}
@@ -495,13 +608,16 @@ function VaultPage({ onLock }: { onLock: () => void }) {
               Folders
             </div>
 
-            {/* Folder list */}
             <nav className="space-y-0.5">
-              {VAULT_DATA.map((folder) => (
+              {vaultData.map((folder) => (
                 <button
                   key={folder.id}
                   onClick={() => setActiveFolder(folder.id)}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+                  draggable
+                  onDragStart={(e) => handleFolderDragStart(e, folder.id)}
+                  onDragOver={handleFolderDragOver}
+                  onDrop={(e) => handleFolderDrop(e, folder.id)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 group"
                   style={{
                     background:
                       activeFolder === folder.id
@@ -516,10 +632,11 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                         ? "oklch(0.75 0.18 200)"
                         : "oklch(0.65 0.02 220)",
                     fontFamily: "DM Sans, sans-serif",
+                    opacity: draggedFolderId === folder.id ? 0.5 : 1,
                   }}
                 >
                   <span className="text-base leading-none">{folder.icon}</span>
-                  <span className="font-medium truncate">{folder.name}</span>
+                  <span className="font-medium truncate flex-1 text-left">{folder.name}</span>
                   <span
                     className="ml-auto text-xs px-1.5 py-0.5 rounded-md flex-shrink-0"
                     style={{
@@ -529,12 +646,16 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                   >
                     {folder.links.length}
                   </span>
+                  <GripVertical
+                    size={12}
+                    className="opacity-0 group-hover:opacity-60 transition-opacity duration-150 flex-shrink-0"
+                    style={{ color: "oklch(0.65 0.18 200)" }}
+                  />
                 </button>
               ))}
             </nav>
           </div>
 
-          {/* Sidebar footer — lock button */}
           <div
             className="p-4 mt-auto border-t"
             style={{ borderColor: "oklch(1 0 0 / 8%)" }}
@@ -572,7 +693,6 @@ function VaultPage({ onLock }: { onLock: () => void }) {
           className="flex items-center gap-4 px-6 py-4 flex-shrink-0"
           style={{ borderBottom: "1px solid oklch(1 0 0 / 8%)" }}
         >
-          {/* Sidebar toggle */}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="p-2 rounded-lg transition-all duration-150"
@@ -602,7 +722,6 @@ function VaultPage({ onLock }: { onLock: () => void }) {
             />
           </button>
 
-          {/* Breadcrumb */}
           <div className="flex items-center gap-2">
             {activeFolder !== "all" && activeFolderData && (
               <>
@@ -634,7 +753,6 @@ function VaultPage({ onLock }: { onLock: () => void }) {
             </h2>
           </div>
 
-          {/* Search */}
           <div className="ml-auto relative max-w-xs w-full">
             <Search
               size={14}
@@ -689,7 +807,7 @@ function VaultPage({ onLock }: { onLock: () => void }) {
           ) : activeFolder === "all" && !searchQuery ? (
             // All folders view — grouped
             <div className="space-y-8 stagger-children">
-              {VAULT_DATA.map((folder) => (
+              {vaultData.map((folder) => (
                 <section key={folder.id}>
                   <button
                     onClick={() => setActiveFolder(folder.id)}
@@ -722,7 +840,13 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                   </button>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                     {folder.links.map((link) => (
-                      <LinkCard key={link.id} link={link} />
+                      <LinkCard
+                        key={link.id}
+                        link={link}
+                        onDragStart={() => {}}
+                        onDragOver={() => {}}
+                        onDrop={() => {}}
+                      />
                     ))}
                   </div>
                 </section>
@@ -741,7 +865,14 @@ function VaultPage({ onLock }: { onLock: () => void }) {
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 stagger-children">
                 {filteredLinks.map((link) => (
-                  <LinkCard key={link.id} link={link} />
+                  <LinkCard
+                    key={link.id}
+                    link={link}
+                    onDragStart={handleLinkDragStart}
+                    onDragOver={handleLinkDragOver}
+                    onDrop={handleLinkDrop}
+                    isDragging={draggedLinkId === link.id}
+                  />
                 ))}
               </div>
             </div>
