@@ -10,14 +10,17 @@
    ============================================================= */
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Eye, EyeOff, Lock, Unlock, ExternalLink, Folder, Search, X, ChevronRight, Shield, LogOut, GripVertical, Edit2, Save, Trash2, Check, Key, Copy, AlertCircle, Plus, Trash } from "lucide-react";
+import { Eye, EyeOff, Lock, Unlock, ExternalLink, Folder, Search, X, ChevronRight, Shield, LogOut, GripVertical, Edit2, Save, Trash2, Check, Key, Copy, AlertCircle, Plus, Trash, Settings, BarChart3 } from "lucide-react";
 
 // ─── Configuration ────────────────────────────────────────────
-const VAULT_PASSWORD = "vault2024";
-const ADMIN_PASSWORD = "admin2024";
+let VAULT_PASSWORD = "vault2024";
+let ADMIN_PASSWORD = "admin2024";
+const OWNER_PASSWORD = "owner2024";
 const RECOVERY_PASSWORD = "recovery2024";
 const STORAGE_KEY = "link-vault-data";
 const PROTECTED_LINKS_KEY = "link-vault-protected";
+const PASSWORDS_KEY = "link-vault-passwords";
+const CLICK_STATS_KEY = "link-vault-clicks";
 
 // ─── Link Data ────────────────────────────────────────────────
 interface LinkItem {
@@ -41,6 +44,15 @@ interface ProtectedLink {
   password: string;
   folderName: string;
   linkTitle: string;
+}
+
+interface ClickStats {
+  [linkId: string]: number;
+}
+
+interface StoredPasswords {
+  vault: string;
+  admin: string;
 }
 
 const DEFAULT_VAULT_DATA: FolderData[] = [
@@ -161,6 +173,59 @@ function saveProtectedLinks(links: Map<string, ProtectedLink>): void {
   } catch (e) {
     console.error("Failed to save protected links:", e);
   }
+}
+
+function loadPasswords(): StoredPasswords {
+  if (typeof window === "undefined") return { vault: "vault2024", admin: "admin2024" };
+  try {
+    const stored = localStorage.getItem(PASSWORDS_KEY);
+    if (stored) {
+      const data = JSON.parse(stored);
+      VAULT_PASSWORD = data.vault;
+      ADMIN_PASSWORD = data.admin;
+      return data;
+    }
+  } catch (e) {
+    console.error("Failed to load passwords:", e);
+  }
+  return { vault: "vault2024", admin: "admin2024" };
+}
+
+function savePasswords(vault: string, admin: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    VAULT_PASSWORD = vault;
+    ADMIN_PASSWORD = admin;
+    localStorage.setItem(PASSWORDS_KEY, JSON.stringify({ vault, admin }));
+  } catch (e) {
+    console.error("Failed to save passwords:", e);
+  }
+}
+
+function loadClickStats(): ClickStats {
+  if (typeof window === "undefined") return {};
+  try {
+    const stored = localStorage.getItem(CLICK_STATS_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch (e) {
+    console.error("Failed to load click stats:", e);
+  }
+  return {};
+}
+
+function saveClickStats(stats: ClickStats): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(CLICK_STATS_KEY, JSON.stringify(stats));
+  } catch (e) {
+    console.error("Failed to save click stats:", e);
+  }
+}
+
+function recordLinkClick(linkId: string): void {
+  const stats = loadClickStats();
+  stats[linkId] = (stats[linkId] || 0) + 1;
+  saveClickStats(stats);
 }
 
 // ─── Favicon helper ───────────────────────────────────────────
@@ -510,6 +575,474 @@ function PasswordManagerModal({ isOpen, onClose, protectedLinks }: PasswordManag
         <button
           onClick={onClose}
           className="w-full py-2.5 rounded-xl text-sm font-semibold"
+          style={{
+            background: "oklch(1 0 0 / 8%)",
+            color: "oklch(0.65 0.02 220)",
+            fontFamily: "Sora, sans-serif",
+          }}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Owner Sign-In Modal ──────────────────────────────────────
+interface OwnerSignInModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+function OwnerSignInModal({ isOpen, onClose, onSuccess }: OwnerSignInModalProps) {
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [isShaking, setIsShaking] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setPassword("");
+      setError("");
+      setIsShaking(false);
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [isOpen]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password.trim()) return;
+
+    if (password === OWNER_PASSWORD) {
+      setError("");
+      setPassword("");
+      onSuccess();
+      onClose();
+    } else {
+      setError("Incorrect owner password.");
+      setIsShaking(true);
+      setPassword("");
+      setTimeout(() => setIsShaking(false), 600);
+      inputRef.current?.focus();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+      onClick={onClose}
+    >
+      <div
+        className={`glass-card-strong rounded-2xl p-8 w-full max-w-md ${isShaking ? "shake" : ""}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          className="text-2xl font-bold mb-2"
+          style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+        >
+          Owner Access
+        </h2>
+        <p className="text-sm mb-6" style={{ color: "oklch(0.60 0.02 220)" }}>
+          Sign in as owner to manage settings and view analytics
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="relative">
+            <input
+              ref={inputRef}
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (error) setError("");
+              }}
+              placeholder="Owner password"
+              className="w-full px-4 py-3 pr-12 rounded-xl text-sm outline-none transition-all"
+              style={{
+                background: "oklch(1 0 0 / 6%)",
+                border: error
+                  ? "1px solid oklch(0.62 0.22 25 / 70%)"
+                  : "1px solid oklch(1 0 0 / 12%)",
+                color: "#E2E8F0",
+                fontFamily: "DM Sans, sans-serif",
+              }}
+              onFocus={(e) => {
+                if (!error) {
+                  e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+                }
+              }}
+              onBlur={(e) => {
+                if (!error) {
+                  e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1"
+              style={{ color: "oklch(0.55 0.02 220)" }}
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+
+          {error && (
+            <p className="text-xs" style={{ color: "oklch(0.70 0.20 25)" }}>
+              <X size={12} className="inline mr-1" />
+              {error}
+            </p>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
+              style={{
+                background: "oklch(1 0 0 / 8%)",
+                color: "oklch(0.65 0.02 220)",
+                fontFamily: "Sora, sans-serif",
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!password.trim()}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+              style={{
+                background: "linear-gradient(135deg, oklch(0.65 0.18 200), oklch(0.55 0.20 215))",
+                color: "#0F172A",
+                fontFamily: "Sora, sans-serif",
+              }}
+            >
+              <Unlock size={14} />
+              Sign In
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Owner Settings Modal ─────────────────────────────────────
+interface OwnerSettingsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  currentVaultPassword: string;
+  currentAdminPassword: string;
+  onSave: (vaultPassword: string, adminPassword: string) => void;
+}
+
+function OwnerSettingsModal({
+  isOpen,
+  onClose,
+  currentVaultPassword,
+  currentAdminPassword,
+  onSave,
+}: OwnerSettingsModalProps) {
+  const [vaultPassword, setVaultPassword] = useState(currentVaultPassword);
+  const [adminPassword, setAdminPassword] = useState(currentAdminPassword);
+  const [showVaultPassword, setShowVaultPassword] = useState(false);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (isOpen) {
+      setVaultPassword(currentVaultPassword);
+      setAdminPassword(currentAdminPassword);
+      setError("");
+    }
+  }, [isOpen, currentVaultPassword, currentAdminPassword]);
+
+  const handleSave = () => {
+    if (!vaultPassword.trim() || !adminPassword.trim()) {
+      setError("Both passwords are required.");
+      return;
+    }
+    onSave(vaultPassword.trim(), adminPassword.trim());
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="glass-card-strong rounded-2xl p-8 w-full max-w-md my-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          className="text-2xl font-bold mb-2"
+          style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+        >
+          Owner Settings
+        </h2>
+        <p className="text-sm mb-6" style={{ color: "oklch(0.60 0.02 220)" }}>
+          Manage vault and admin passwords
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <label
+              className="block text-xs font-semibold mb-2 uppercase tracking-widest"
+              style={{ fontFamily: "Sora, sans-serif", color: "oklch(0.65 0.02 220)" }}
+            >
+              Vault Password
+            </label>
+            <div className="relative">
+              <input
+                type={showVaultPassword ? "text" : "password"}
+                value={vaultPassword}
+                onChange={(e) => {
+                  setVaultPassword(e.target.value);
+                  if (error) setError("");
+                }}
+                className="w-full px-4 py-2.5 pr-12 rounded-lg text-sm outline-none transition-all"
+                style={{
+                  background: "oklch(1 0 0 / 6%)",
+                  border: "1px solid oklch(1 0 0 / 12%)",
+                  color: "#E2E8F0",
+                  fontFamily: "DM Sans, sans-serif",
+                }}
+                onFocus={(e) => {
+                  e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowVaultPassword(!showVaultPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1"
+                style={{ color: "oklch(0.55 0.02 220)" }}
+                tabIndex={-1}
+              >
+                {showVaultPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label
+              className="block text-xs font-semibold mb-2 uppercase tracking-widest"
+              style={{ fontFamily: "Sora, sans-serif", color: "oklch(0.65 0.02 220)" }}
+            >
+              Admin Password
+            </label>
+            <div className="relative">
+              <input
+                type={showAdminPassword ? "text" : "password"}
+                value={adminPassword}
+                onChange={(e) => {
+                  setAdminPassword(e.target.value);
+                  if (error) setError("");
+                }}
+                className="w-full px-4 py-2.5 pr-12 rounded-lg text-sm outline-none transition-all"
+                style={{
+                  background: "oklch(1 0 0 / 6%)",
+                  border: "1px solid oklch(1 0 0 / 12%)",
+                  color: "#E2E8F0",
+                  fontFamily: "DM Sans, sans-serif",
+                }}
+                onFocus={(e) => {
+                  e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowAdminPassword(!showAdminPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1"
+                style={{ color: "oklch(0.55 0.02 220)" }}
+                tabIndex={-1}
+              >
+                {showAdminPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+
+          {error && (
+            <p className="text-xs" style={{ color: "oklch(0.70 0.20 25)" }}>
+              <X size={12} className="inline mr-1" />
+              {error}
+            </p>
+          )}
+        </div>
+
+        <div className="flex gap-3 mt-8">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
+            style={{
+              background: "oklch(1 0 0 / 8%)",
+              color: "oklch(0.65 0.02 220)",
+              fontFamily: "Sora, sans-serif",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+            style={{
+              background: "linear-gradient(135deg, oklch(0.65 0.18 200), oklch(0.55 0.20 215))",
+              color: "#0F172A",
+              fontFamily: "Sora, sans-serif",
+            }}
+          >
+            <Save size={14} />
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Link Analytics Modal ─────────────────────────────────────
+interface LinkAnalyticsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  vaultData: FolderData[];
+  clickStats: ClickStats;
+}
+
+function LinkAnalyticsModal({ isOpen, onClose, vaultData, clickStats }: LinkAnalyticsModalProps) {
+  const allLinksWithStats = useMemo(() => {
+    const links: Array<{ id: string; title: string; folder: string; clicks: number }> = [];
+    vaultData.forEach((folder) => {
+      folder.links.forEach((link) => {
+        links.push({
+          id: link.id,
+          title: link.title,
+          folder: folder.name,
+          clicks: clickStats[link.id] || 0,
+        });
+      });
+    });
+    return links.sort((a, b) => b.clicks - a.clicks);
+  }, [vaultData, clickStats]);
+
+  const totalClicks = useMemo(
+    () => Object.values(clickStats).reduce((sum, count) => sum + count, 0),
+    [clickStats]
+  );
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="glass-card-strong rounded-2xl p-8 w-full max-w-2xl my-8 max-h-[80vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          className="text-2xl font-bold mb-2"
+          style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+        >
+          Link Analytics
+        </h2>
+        <p className="text-sm mb-6" style={{ color: "oklch(0.60 0.02 220)" }}>
+          Track which resources are most popular
+        </p>
+
+        <div className="mb-6 p-4 rounded-lg" style={{ background: "oklch(0.65 0.18 200 / 10%)" }}>
+          <div className="flex items-center justify-between">
+            <span style={{ color: "oklch(0.60 0.02 220)", fontFamily: "DM Sans, sans-serif" }}>
+              Total Clicks
+            </span>
+            <span
+              className="text-2xl font-bold"
+              style={{ fontFamily: "Sora, sans-serif", color: "oklch(0.75 0.18 200)" }}
+            >
+              {totalClicks}
+            </span>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {allLinksWithStats.length === 0 ? (
+            <p
+              className="text-sm text-center py-8"
+              style={{ color: "oklch(0.55 0.02 220)" }}
+            >
+              No click data yet. Links will appear here as they are accessed.
+            </p>
+          ) : (
+            allLinksWithStats.map((link, index) => (
+              <div
+                key={link.id}
+                className="p-4 rounded-lg flex items-center justify-between"
+                style={{
+                  background: "oklch(1 0 0 / 5%)",
+                  border: "1px solid oklch(1 0 0 / 10%)",
+                }}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span
+                      className="text-xs font-semibold px-2 py-1 rounded-md"
+                      style={{
+                        background: "oklch(0.65 0.18 200 / 15%)",
+                        color: "oklch(0.75 0.18 200)",
+                        fontFamily: "Sora, sans-serif",
+                      }}
+                    >
+                      #{index + 1}
+                    </span>
+                    <p
+                      className="text-sm font-semibold truncate"
+                      style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+                    >
+                      {link.title}
+                    </p>
+                  </div>
+                  <p className="text-xs" style={{ color: "oklch(0.55 0.02 220)" }}>
+                    {link.folder}
+                  </p>
+                </div>
+                <div
+                  className="ml-4 px-3 py-2 rounded-lg text-center flex-shrink-0"
+                  style={{
+                    background: "oklch(0.65 0.18 200 / 20%)",
+                    color: "oklch(0.75 0.18 200)",
+                  }}
+                >
+                  <p
+                    className="text-lg font-bold"
+                    style={{ fontFamily: "Sora, sans-serif" }}
+                  >
+                    {link.clicks}
+                  </p>
+                  <p className="text-xs" style={{ color: "oklch(0.65 0.18 200)" }}>
+                    clicks
+                  </p>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <button
+          onClick={onClose}
+          className="w-full mt-8 py-2.5 rounded-xl text-sm font-semibold transition-all"
           style={{
             background: "oklch(1 0 0 / 8%)",
             color: "oklch(0.65 0.02 220)",
@@ -1712,6 +2245,8 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
 function VaultPage({ onLock }: { onLock: () => void }) {
   const [vaultData, setVaultData] = useState<FolderData[]>(loadVaultData);
   const [protectedLinks, setProtectedLinks] = useState<Map<string, ProtectedLink>>(loadProtectedLinks);
+  const [clickStats, setClickStats] = useState<ClickStats>(loadClickStats);
+  const [storedPasswords, setStoredPasswords] = useState<StoredPasswords>(loadPasswords);
   const [activeFolder, setActiveFolder] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -1728,6 +2263,10 @@ function VaultPage({ onLock }: { onLock: () => void }) {
   const [showAddLinkModal, setShowAddLinkModal] = useState(false);
   const [showEditFolderModal, setShowEditFolderModal] = useState(false);
   const [editingFolder, setEditingFolder] = useState<FolderData | null>(null);
+  const [showOwnerSignIn, setShowOwnerSignIn] = useState(false);
+  const [isOwnerMode, setIsOwnerMode] = useState(false);
+  const [showOwnerSettings, setShowOwnerSettings] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
   // Save to localStorage whenever vault data changes
   useEffect(() => {
@@ -1884,6 +2423,22 @@ function VaultPage({ onLock }: { onLock: () => void }) {
     }
   };
 
+  const handleOwnerSignIn = () => {
+    setIsOwnerMode(true);
+    setShowOwnerSignIn(false);
+  };
+
+  const handleSavePasswords = (vaultPassword: string, adminPassword: string) => {
+    savePasswords(vaultPassword, adminPassword);
+    setStoredPasswords({ vault: vaultPassword, admin: adminPassword });
+  };
+
+  const handleLinkClick = (link: LinkItem) => {
+    recordLinkClick(link.id);
+    const newStats = loadClickStats();
+    setClickStats(newStats);
+  };
+
   // Handle link drag and drop
   const handleLinkDragStart = (e: React.DragEvent<HTMLAnchorElement>, linkId: string) => {
     e.preventDefault();
@@ -2019,6 +2574,27 @@ function VaultPage({ onLock }: { onLock: () => void }) {
         onClose={() => setShowEditFolderModal(false)}
         onSave={handleSaveFolder}
         onDelete={handleDeleteFolder}
+      />
+
+      <OwnerSignInModal
+        isOpen={showOwnerSignIn}
+        onClose={() => setShowOwnerSignIn(false)}
+        onSuccess={handleOwnerSignIn}
+      />
+
+      <OwnerSettingsModal
+        isOpen={showOwnerSettings}
+        onClose={() => setShowOwnerSettings(false)}
+        currentVaultPassword={storedPasswords.vault}
+        currentAdminPassword={storedPasswords.admin}
+        onSave={handleSavePasswords}
+      />
+
+      <LinkAnalyticsModal
+        isOpen={showAnalytics}
+        onClose={() => setShowAnalytics(false)}
+        vaultData={vaultData}
+        clickStats={clickStats}
       />
 
       {/* Sidebar */}
@@ -2195,6 +2771,93 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                 <Key size={15} />
                 <span>Password Manager</span>
               </button>
+            )}
+
+            <button
+              onClick={() => setShowOwnerSignIn(true)}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+              style={{
+                background: isOwnerMode ? "oklch(0.65 0.18 145 / 15%)" : "oklch(1 0 0 / 4%)",
+                color: isOwnerMode ? "oklch(0.75 0.18 145)" : "oklch(0.55 0.02 220)",
+                fontFamily: "DM Sans, sans-serif",
+                border: isOwnerMode ? "1px solid oklch(0.65 0.18 145 / 30%)" : "1px solid transparent",
+              }}
+              onMouseEnter={(e) => {
+                if (!isOwnerMode) {
+                  (e.currentTarget as HTMLButtonElement).style.background = "oklch(1 0 0 / 8%)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isOwnerMode) {
+                  (e.currentTarget as HTMLButtonElement).style.background = "oklch(1 0 0 / 4%)";
+                }
+              }}
+            >
+              <Shield size={15} />
+              <span>{isOwnerMode ? "Owner Mode On" : "Owner Access"}</span>
+            </button>
+
+            {isOwnerMode && (
+              <>
+                <button
+                  onClick={() => setShowOwnerSettings(true)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+                  style={{
+                    background: "oklch(0.65 0.18 145 / 10%)",
+                    color: "oklch(0.75 0.18 145)",
+                    fontFamily: "DM Sans, sans-serif",
+                    border: "1px solid oklch(0.65 0.18 145 / 20%)",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 145 / 15%)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 145 / 10%)";
+                  }}
+                >
+                  <Settings size={15} />
+                  <span>Settings</span>
+                </button>
+
+                <button
+                  onClick={() => setShowAnalytics(true)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+                  style={{
+                    background: "oklch(0.65 0.18 145 / 10%)",
+                    color: "oklch(0.75 0.18 145)",
+                    fontFamily: "DM Sans, sans-serif",
+                    border: "1px solid oklch(0.65 0.18 145 / 20%)",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 145 / 15%)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 145 / 10%)";
+                  }}
+                >
+                  <BarChart3 size={15} />
+                  <span>Analytics</span>
+                </button>
+
+                <button
+                  onClick={() => setIsOwnerMode(false)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+                  style={{
+                    background: "oklch(0.62 0.22 25 / 12%)",
+                    color: "oklch(0.70 0.20 25)",
+                    fontFamily: "DM Sans, sans-serif",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.62 0.22 25 / 20%)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.62 0.22 25 / 12%)";
+                  }}
+                >
+                  <Check size={15} />
+                  <span>Exit Owner Mode</span>
+                </button>
+              </>
             )}
 
             <button
