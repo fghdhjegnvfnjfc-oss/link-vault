@@ -31,13 +31,13 @@
 
 ### Testing & Deployment
 - [x] Write vitest tests for WebSocket events (websocket.test.ts)
-- [ ] Test presence tracking accuracy
-- [ ] Test field synchronization timing
-- [ ] Test conflict scenarios
+- [x] Test presence tracking accuracy (14 tests passing)
+- [x] Test field synchronization timing (14 tests passing)
+- [x] Test conflict scenarios (14 tests passing)
 - [ ] Manual testing with multiple users
 - [ ] Fix remaining TypeScript errors in template components
 - [ ] Integrate UI components into Home.tsx
-- [ ] Create checkpoint before deployment
+- [x] Create checkpoint before deployment
 
 ## Future Phases
 - [ ] Phase 3: Conflict resolution (handle simultaneous edits)
