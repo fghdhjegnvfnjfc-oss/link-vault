@@ -21,6 +21,8 @@ const STORAGE_KEY = "link-vault-data";
 const PROTECTED_LINKS_KEY = "link-vault-protected";
 const PASSWORDS_KEY = "link-vault-passwords";
 const CLICK_STATS_KEY = "link-vault-clicks";
+const AUDIT_LOG_KEY = "link-vault-audit-log";
+const ADMIN_EMAILS_KEY = "link-vault-admin-emails";
 
 // ─── Link Data ────────────────────────────────────────────────
 interface LinkItem {
@@ -53,6 +55,21 @@ interface ClickStats {
 interface StoredPasswords {
   vault: string;
   admin: string;
+}
+
+interface AuditLogEntry {
+  id: string;
+  timestamp: number;
+  email: string;
+  action: "link_accessed" | "link_edited" | "link_deleted" | "link_added" | "folder_edited" | "folder_deleted" | "folder_added" | "link_password_set";
+  resourceType: "link" | "folder";
+  resourceName: string;
+  details?: string;
+}
+
+interface AdminEmail {
+  email: string;
+  addedAt: number;
 }
 
 const DEFAULT_VAULT_DATA: FolderData[] = [
@@ -226,6 +243,81 @@ function recordLinkClick(linkId: string): void {
   const stats = loadClickStats();
   stats[linkId] = (stats[linkId] || 0) + 1;
   saveClickStats(stats);
+}
+
+function loadAuditLog(): AuditLogEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = localStorage.getItem(AUDIT_LOG_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch (e) {
+    console.error("Failed to load audit log:", e);
+  }
+  return [];
+}
+
+function saveAuditLog(entries: AuditLogEntry[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(AUDIT_LOG_KEY, JSON.stringify(entries));
+  } catch (e) {
+    console.error("Failed to save audit log:", e);
+  }
+}
+
+function addAuditEntry(
+  email: string,
+  action: AuditLogEntry["action"],
+  resourceType: "link" | "folder",
+  resourceName: string,
+  details?: string
+): void {
+  const log = loadAuditLog();
+  const entry: AuditLogEntry = {
+    id: Math.random().toString(36).substr(2, 9),
+    timestamp: Date.now(),
+    email,
+    action,
+    resourceType,
+    resourceName,
+    details,
+  };
+  log.push(entry);
+  saveAuditLog(log);
+}
+
+function loadAdminEmails(): AdminEmail[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = localStorage.getItem(ADMIN_EMAILS_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch (e) {
+    console.error("Failed to load admin emails:", e);
+  }
+  return [];
+}
+
+function saveAdminEmails(emails: AdminEmail[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(ADMIN_EMAILS_KEY, JSON.stringify(emails));
+  } catch (e) {
+    console.error("Failed to save admin emails:", e);
+  }
+}
+
+function addAdminEmail(email: string): void {
+  const emails = loadAdminEmails();
+  if (!emails.find((e) => e.email === email)) {
+    emails.push({ email, addedAt: Date.now() });
+    saveAdminEmails(emails);
+  }
+}
+
+function removeAdminEmail(email: string): void {
+  const emails = loadAdminEmails();
+  const filtered = emails.filter((e) => e.email !== email);
+  saveAdminEmails(filtered);
 }
 
 // ─── Favicon helper ───────────────────────────────────────────
@@ -575,6 +667,271 @@ function PasswordManagerModal({ isOpen, onClose, protectedLinks }: PasswordManag
         <button
           onClick={onClose}
           className="w-full py-2.5 rounded-xl text-sm font-semibold"
+          style={{
+            background: "oklch(1 0 0 / 8%)",
+            color: "oklch(0.65 0.02 220)",
+            fontFamily: "Sora, sans-serif",
+          }}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Admin Email Sign-In Modal ───────────────────────────────────
+interface AdminEmailSignInModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: (email: string) => void;
+}
+
+function AdminEmailSignInModal({ isOpen, onClose, onSuccess }: AdminEmailSignInModalProps) {
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setEmail("");
+      setError("");
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [isOpen]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setError("Email is required.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    addAdminEmail(trimmedEmail);
+    setError("");
+    setEmail("");
+    onSuccess(trimmedEmail);
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+      onClick={onClose}
+    >
+      <div
+        className="glass-card-strong rounded-2xl p-8 w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          className="text-2xl font-bold mb-2"
+          style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+        >
+          Admin Sign In
+        </h2>
+        <p className="text-sm mb-6" style={{ color: "oklch(0.60 0.02 220)" }}>
+          Enter your email to access admin mode
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <input
+              ref={inputRef}
+              type="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (error) setError("");
+              }}
+              placeholder="your.email@example.com"
+              className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
+              style={{
+                background: "oklch(1 0 0 / 6%)",
+                border: error
+                  ? "1px solid oklch(0.62 0.22 25 / 70%)"
+                  : "1px solid oklch(1 0 0 / 12%)",
+                color: "#E2E8F0",
+                fontFamily: "DM Sans, sans-serif",
+              }}
+              onFocus={(e) => {
+                if (!error) {
+                  e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+                }
+              }}
+              onBlur={(e) => {
+                if (!error) {
+                  e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+                }
+              }}
+            />
+          </div>
+
+          {error && (
+            <p className="text-xs" style={{ color: "oklch(0.70 0.20 25)" }}>
+              <X size={12} className="inline mr-1" />
+              {error}
+            </p>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
+              style={{
+                background: "oklch(1 0 0 / 8%)",
+                color: "oklch(0.65 0.02 220)",
+                fontFamily: "Sora, sans-serif",
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!email.trim()}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+              style={{
+                background: "linear-gradient(135deg, oklch(0.65 0.18 200), oklch(0.55 0.20 215))",
+                color: "#0F172A",
+                fontFamily: "Sora, sans-serif",
+              }}
+            >
+              <Unlock size={14} />
+              Sign In
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Audit Log Modal ───────────────────────────────────────────
+interface AuditLogModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  auditLog: AuditLogEntry[];
+}
+
+function AuditLogModal({ isOpen, onClose, auditLog }: AuditLogModalProps) {
+  const sortedLog = useMemo(() => {
+    return [...auditLog].sort((a, b) => b.timestamp - a.timestamp);
+  }, [auditLog]);
+
+  const getActionLabel = (action: AuditLogEntry["action"]): string => {
+    const labels: Record<AuditLogEntry["action"], string> = {
+      link_accessed: "Accessed Link",
+      link_edited: "Edited Link",
+      link_deleted: "Deleted Link",
+      link_added: "Added Link",
+      folder_edited: "Edited Folder",
+      folder_deleted: "Deleted Folder",
+      folder_added: "Added Folder",
+      link_password_set: "Set Link Password",
+    };
+    return labels[action];
+  };
+
+  const getActionColor = (action: AuditLogEntry["action"]): string => {
+    if (action.includes("deleted")) return "oklch(0.70 0.20 25)";
+    if (action.includes("added")) return "oklch(0.75 0.18 145)";
+    if (action.includes("edited")) return "oklch(0.75 0.18 200)";
+    return "oklch(0.65 0.02 220)";
+  };
+
+  const formatTime = (timestamp: number): string => {
+    const date = new Date(timestamp);
+    return date.toLocaleString();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="glass-card-strong rounded-2xl p-8 w-full max-w-3xl my-8 max-h-[80vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          className="text-2xl font-bold mb-2"
+          style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+        >
+          Audit Log
+        </h2>
+        <p className="text-sm mb-6" style={{ color: "oklch(0.60 0.02 220)" }}>
+          Complete history of vault changes
+        </p>
+
+        <div className="space-y-2">
+          {sortedLog.length === 0 ? (
+            <p
+              className="text-sm text-center py-8"
+              style={{ color: "oklch(0.55 0.02 220)" }}
+            >
+              No audit entries yet.
+            </p>
+          ) : (
+            sortedLog.map((entry) => (
+              <div
+                key={entry.id}
+                className="p-4 rounded-lg border"
+                style={{
+                  background: "oklch(1 0 0 / 5%)",
+                  border: "1px solid oklch(1 0 0 / 10%)",
+                }}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span
+                        className="text-xs font-semibold px-2 py-1 rounded-md"
+                        style={{
+                          background: `${getActionColor(entry.action)}20`,
+                          color: getActionColor(entry.action),
+                          fontFamily: "Sora, sans-serif",
+                        }}
+                      >
+                        {getActionLabel(entry.action)}
+                      </span>
+                    </div>
+                    <p
+                      className="text-sm font-semibold truncate"
+                      style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+                    >
+                      {entry.resourceName}
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: "oklch(0.55 0.02 220)" }}>
+                      By: {entry.email}
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-xs" style={{ color: "oklch(0.55 0.02 220)" }}>
+                      {formatTime(entry.timestamp)}
+                    </p>
+                  </div>
+                </div>
+                {entry.details && (
+                  <p className="text-xs mt-2" style={{ color: "oklch(0.50 0.02 220)" }}>
+                    {entry.details}
+                  </p>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        <button
+          onClick={onClose}
+          className="w-full mt-8 py-2.5 rounded-xl text-sm font-semibold transition-all"
           style={{
             background: "oklch(1 0 0 / 8%)",
             color: "oklch(0.65 0.02 220)",
@@ -2267,6 +2624,11 @@ function VaultPage({ onLock }: { onLock: () => void }) {
   const [isOwnerMode, setIsOwnerMode] = useState(false);
   const [showOwnerSettings, setShowOwnerSettings] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>(loadAuditLog);
+  const [adminEmails, setAdminEmails] = useState<AdminEmail[]>(loadAdminEmails);
+  const [currentAdminEmail, setCurrentAdminEmail] = useState<string | null>(null);
+  const [showAdminEmailSignIn, setShowAdminEmailSignIn] = useState(false);
+  const [showAuditLog, setShowAuditLog] = useState(false);
 
   // Save to localStorage whenever vault data changes
   useEffect(() => {
@@ -2276,6 +2638,14 @@ function VaultPage({ onLock }: { onLock: () => void }) {
   useEffect(() => {
     saveProtectedLinks(protectedLinks);
   }, [protectedLinks]);
+
+  useEffect(() => {
+    saveAuditLog(auditLog);
+  }, [auditLog]);
+
+  useEffect(() => {
+    saveAdminEmails(adminEmails);
+  }, [adminEmails]);
 
   const allLinks = useMemo(
     () => vaultData.flatMap((f) => f.links.map((l) => ({ ...l, folderId: f.id }))),
@@ -2325,6 +2695,17 @@ function VaultPage({ onLock }: { onLock: () => void }) {
   };
 
   const handleSaveLink = (updatedLink: LinkItem) => {
+    if (currentAdminEmail) {
+      const newEntry: AuditLogEntry = {
+        id: Math.random().toString(36).substr(2, 9),
+        timestamp: Date.now(),
+        email: currentAdminEmail,
+        action: "link_edited",
+        resourceType: "link",
+        resourceName: updatedLink.title,
+      };
+      setAuditLog([...auditLog, newEntry]);
+    }
     const updatedFolders = vaultData.map((folder) => ({
       ...folder,
       links: folder.links.map((link) =>
@@ -2337,6 +2718,17 @@ function VaultPage({ onLock }: { onLock: () => void }) {
 
   const handleDeleteLink = () => {
     if (!editingLink) return;
+    if (currentAdminEmail) {
+      const newEntry: AuditLogEntry = {
+        id: Math.random().toString(36).substr(2, 9),
+        timestamp: Date.now(),
+        email: currentAdminEmail,
+        action: "link_deleted",
+        resourceType: "link",
+        resourceName: editingLink.title,
+      };
+      setAuditLog([...auditLog, newEntry]);
+    }
     const updatedFolders = vaultData.map((folder) => ({
       ...folder,
       links: folder.links.filter((link) => link.id !== editingLink.id),
@@ -2358,6 +2750,18 @@ function VaultPage({ onLock }: { onLock: () => void }) {
 
   const handleSavePassword = (password: string | null) => {
     if (!editingLink) return;
+    if (currentAdminEmail) {
+      const newEntry: AuditLogEntry = {
+        id: Math.random().toString(36).substr(2, 9),
+        timestamp: Date.now(),
+        email: currentAdminEmail,
+        action: "link_password_set",
+        resourceType: "link",
+        resourceName: editingLink.title,
+        details: password ? "Password set" : "Password removed",
+      };
+      setAuditLog([...auditLog, newEntry]);
+    }
     const newProtected = new Map(protectedLinks);
     if (password) {
       const folder = vaultData.find((f) =>
@@ -2392,6 +2796,17 @@ function VaultPage({ onLock }: { onLock: () => void }) {
   };
 
   const handleAddNewLink = (link: LinkItem) => {
+    if (currentAdminEmail) {
+      const newEntry: AuditLogEntry = {
+        id: Math.random().toString(36).substr(2, 9),
+        timestamp: Date.now(),
+        email: currentAdminEmail,
+        action: "link_added",
+        resourceType: "link",
+        resourceName: link.title,
+      };
+      setAuditLog([...auditLog, newEntry]);
+    }
     const updatedFolders = vaultData.map((folder) =>
       folder.id === activeFolder
         ? { ...folder, links: [...folder.links, link] }
@@ -2407,6 +2822,17 @@ function VaultPage({ onLock }: { onLock: () => void }) {
   };
 
   const handleSaveFolder = (updatedFolder: FolderData) => {
+    if (currentAdminEmail) {
+      const newEntry: AuditLogEntry = {
+        id: Math.random().toString(36).substr(2, 9),
+        timestamp: Date.now(),
+        email: currentAdminEmail,
+        action: "folder_edited",
+        resourceType: "folder",
+        resourceName: updatedFolder.name,
+      };
+      setAuditLog([...auditLog, newEntry]);
+    }
     const updatedFolders = vaultData.map((folder) =>
       folder.id === updatedFolder.id ? updatedFolder : folder
     );
@@ -2416,6 +2842,17 @@ function VaultPage({ onLock }: { onLock: () => void }) {
 
   const handleDeleteFolder = () => {
     if (editingFolder) {
+      if (currentAdminEmail) {
+        const newEntry: AuditLogEntry = {
+          id: Math.random().toString(36).substr(2, 9),
+          timestamp: Date.now(),
+          email: currentAdminEmail,
+          action: "folder_deleted",
+          resourceType: "folder",
+          resourceName: editingFolder.name,
+        };
+        setAuditLog([...auditLog, newEntry]);
+      }
       const updatedFolders = vaultData.filter((f) => f.id !== editingFolder.id);
       setVaultData(updatedFolders);
       setActiveFolder("all");
@@ -2437,6 +2874,27 @@ function VaultPage({ onLock }: { onLock: () => void }) {
     recordLinkClick(link.id);
     const newStats = loadClickStats();
     setClickStats(newStats);
+    if (currentAdminEmail) {
+      const newEntry: AuditLogEntry = {
+        id: Math.random().toString(36).substr(2, 9),
+        timestamp: Date.now(),
+        email: currentAdminEmail,
+        action: "link_accessed",
+        resourceType: "link",
+        resourceName: link.title,
+      };
+      setAuditLog([...auditLog, newEntry]);
+    }
+  };
+
+  const handleAdminEmailSignIn = (email: string) => {
+    setCurrentAdminEmail(email);
+    setShowAdminEmailSignIn(false);
+  };
+
+  const handleAdminLogout = () => {
+    setCurrentAdminEmail(null);
+    setIsEditMode(false);
   };
 
   // Handle link drag and drop
@@ -2595,6 +3053,18 @@ function VaultPage({ onLock }: { onLock: () => void }) {
         onClose={() => setShowAnalytics(false)}
         vaultData={vaultData}
         clickStats={clickStats}
+      />
+
+      <AdminEmailSignInModal
+        isOpen={showAdminEmailSignIn}
+        onClose={() => setShowAdminEmailSignIn(false)}
+        onSuccess={handleAdminEmailSignIn}
+      />
+
+      <AuditLogModal
+        isOpen={showAuditLog}
+        onClose={() => setShowAuditLog(false)}
+        auditLog={auditLog}
       />
 
       {/* Sidebar */}
@@ -2856,6 +3326,73 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                 >
                   <Check size={15} />
                   <span>Exit Owner Mode</span>
+                </button>
+              </>
+            )}
+
+            <button
+              onClick={() => setShowAdminEmailSignIn(true)}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+              style={{
+                background: currentAdminEmail ? "oklch(0.65 0.18 200 / 15%)" : "oklch(1 0 0 / 4%)",
+                color: currentAdminEmail ? "oklch(0.75 0.18 200)" : "oklch(0.55 0.02 220)",
+                fontFamily: "DM Sans, sans-serif",
+                border: currentAdminEmail ? "1px solid oklch(0.65 0.18 200 / 30%)" : "1px solid transparent",
+              }}
+              onMouseEnter={(e) => {
+                if (!currentAdminEmail) {
+                  (e.currentTarget as HTMLButtonElement).style.background = "oklch(1 0 0 / 8%)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!currentAdminEmail) {
+                  (e.currentTarget as HTMLButtonElement).style.background = "oklch(1 0 0 / 4%)";
+                }
+              }}
+            >
+              <Shield size={15} />
+              <span>{currentAdminEmail ? `Admin: ${currentAdminEmail.split("@")[0]}` : "Admin Sign In"}</span>
+            </button>
+
+            {currentAdminEmail && (
+              <>
+                <button
+                  onClick={() => setShowAuditLog(true)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+                  style={{
+                    background: "oklch(0.65 0.18 200 / 10%)",
+                    color: "oklch(0.75 0.18 200)",
+                    fontFamily: "DM Sans, sans-serif",
+                    border: "1px solid oklch(0.65 0.18 200 / 20%)",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 200 / 15%)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 200 / 10%)";
+                  }}
+                >
+                  <BarChart3 size={15} />
+                  <span>Audit Log</span>
+                </button>
+
+                <button
+                  onClick={handleAdminLogout}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+                  style={{
+                    background: "oklch(0.62 0.22 25 / 12%)",
+                    color: "oklch(0.70 0.20 25)",
+                    fontFamily: "DM Sans, sans-serif",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.62 0.22 25 / 20%)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.62 0.22 25 / 12%)";
+                  }}
+                >
+                  <LogOut size={15} />
+                  <span>Admin Logout</span>
                 </button>
               </>
             )}
