@@ -24,6 +24,7 @@ const CLICK_STATS_KEY = "link-vault-clicks";
 const AUDIT_LOG_KEY = "link-vault-audit-log";
 const ADMIN_EMAILS_KEY = "link-vault-admin-emails";
 const PENDING_APPROVALS_KEY = "link-vault-pending-approvals";
+const ADMIN_PASSWORDS_KEY = "link-vault-admin-passwords";
 
 // ─── Link Data ────────────────────────────────────────────────
 interface LinkItem {
@@ -78,6 +79,12 @@ interface PendingApproval {
   email: string;
   requestedAt: number;
   status: "pending" | "approved" | "rejected";
+}
+
+interface AdminPasswordEntry {
+  email: string;
+  password: string;
+  setAt: number;
 }
 
 const DEFAULT_VAULT_DATA: FolderData[] = [
@@ -387,6 +394,49 @@ function rejectEmailRequest(approvalId: string): void {
 function isEmailApproved(email: string): boolean {
   const approvedEmails = loadAdminEmails();
   return approvedEmails.some((e) => e.email === email);
+}
+
+function loadAdminPasswords(): AdminPasswordEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = localStorage.getItem(ADMIN_PASSWORDS_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch (e) {
+    console.error("Failed to load admin passwords:", e);
+  }
+  return [];
+}
+
+function saveAdminPasswords(passwords: AdminPasswordEntry[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(ADMIN_PASSWORDS_KEY, JSON.stringify(passwords));
+  } catch (e) {
+    console.error("Failed to save admin passwords:", e);
+  }
+}
+
+function setAdminPassword(email: string, password: string): void {
+  const passwords = loadAdminPasswords();
+  const existing = passwords.findIndex((p) => p.email === email);
+  if (existing >= 0) {
+    passwords[existing] = { email, password, setAt: Date.now() };
+  } else {
+    passwords.push({ email, password, setAt: Date.now() });
+  }
+  saveAdminPasswords(passwords);
+}
+
+function getAdminPassword(email: string): string | null {
+  const passwords = loadAdminPasswords();
+  const entry = passwords.find((p) => p.email === email);
+  return entry ? entry.password : null;
+}
+
+function removeAdminPassword(email: string): void {
+  const passwords = loadAdminPasswords();
+  const filtered = passwords.filter((p) => p.email !== email);
+  saveAdminPasswords(filtered);
 }
 
 // ─── Favicon helper ───────────────────────────────────────────
@@ -758,18 +808,22 @@ interface AdminEmailSignInModalProps {
 
 function AdminEmailSignInModal({ isOpen, onClose, onSuccess }: AdminEmailSignInModalProps) {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [step, setStep] = useState<"email" | "password">("email");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       setEmail("");
+      setPassword("");
       setError("");
+      setStep("email");
       setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [isOpen]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleEmailSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
@@ -781,15 +835,34 @@ function AdminEmailSignInModal({ isOpen, onClose, onSuccess }: AdminEmailSignInM
       return;
     }
     if (isEmailApproved(trimmedEmail)) {
-      setError("");
-      setEmail("");
-      onSuccess(trimmedEmail);
-      onClose();
+      const adminPassword = getAdminPassword(trimmedEmail);
+      if (adminPassword) {
+        setStep("password");
+        setError("");
+      } else {
+        setError("");
+        onSuccess(trimmedEmail);
+        onClose();
+      }
     } else {
       requestEmailApproval(trimmedEmail);
       setError("");
       setEmail("");
       onClose();
+    }
+  };
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const adminPassword = getAdminPassword(email.trim());
+    if (password === adminPassword) {
+      setError("");
+      setPassword("");
+      onSuccess(email.trim());
+      onClose();
+    } else {
+      setError("Incorrect password.");
+      setPassword("");
     }
   };
 
@@ -808,23 +881,29 @@ function AdminEmailSignInModal({ isOpen, onClose, onSuccess }: AdminEmailSignInM
           className="text-2xl font-bold mb-2"
           style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
         >
-          Admin Sign In
+          {step === "email" ? "Admin Sign In" : "Enter Admin Password"}
         </h2>
         <p className="text-sm mb-6" style={{ color: "oklch(0.60 0.02 220)" }}>
-          Enter your email to request admin access. Owner approval required for new emails.
+          {step === "email"
+            ? "Enter your email to request admin access. Owner approval required for new emails."
+            : `Enter the password for ${email}`}
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={step === "email" ? handleEmailSubmit : handlePasswordSubmit} className="space-y-4">
           <div>
             <input
               ref={inputRef}
-              type="email"
-              value={email}
+              type={step === "email" ? "email" : "password"}
+              value={step === "email" ? email : password}
               onChange={(e) => {
-                setEmail(e.target.value);
+                if (step === "email") {
+                  setEmail(e.target.value);
+                } else {
+                  setPassword(e.target.value);
+                }
                 if (error) setError("");
               }}
-              placeholder="your.email@example.com"
+              placeholder={step === "email" ? "your.email@example.com" : "Enter password"}
               className="w-full px-4 py-3 rounded-xl text-sm outline-none transition-all"
               style={{
                 background: "oklch(1 0 0 / 6%)",
@@ -855,21 +934,41 @@ function AdminEmailSignInModal({ isOpen, onClose, onSuccess }: AdminEmailSignInM
           )}
 
           <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
-              style={{
-                background: "oklch(1 0 0 / 8%)",
-                color: "oklch(0.65 0.02 220)",
-                fontFamily: "Sora, sans-serif",
-              }}
-            >
-              Cancel
-            </button>
+            {step === "password" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStep("email");
+                  setPassword("");
+                  setError("");
+                }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                style={{
+                  background: "oklch(1 0 0 / 8%)",
+                  color: "oklch(0.65 0.02 220)",
+                  fontFamily: "Sora, sans-serif",
+                }}
+              >
+                Back
+              </button>
+            )}
+            {step === "email" && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                style={{
+                  background: "oklch(1 0 0 / 8%)",
+                  color: "oklch(0.65 0.02 220)",
+                  fontFamily: "Sora, sans-serif",
+                }}
+              >
+                Cancel
+              </button>
+            )}
             <button
               type="submit"
-              disabled={!email.trim()}
+              disabled={step === "email" ? !email.trim() : !password.trim()}
               className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
               style={{
                 background: "linear-gradient(135deg, oklch(0.65 0.18 200), oklch(0.55 0.20 215))",
@@ -878,7 +977,7 @@ function AdminEmailSignInModal({ isOpen, onClose, onSuccess }: AdminEmailSignInM
               }}
             >
               <Unlock size={14} />
-              Sign In
+              {step === "email" ? "Continue" : "Sign In"}
             </button>
           </div>
         </form>
@@ -1296,6 +1395,340 @@ function OwnerSignInModal({ isOpen, onClose, onSuccess }: OwnerSignInModalProps)
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Admin Management Modal ────────────────────────────────────
+interface AdminManagementModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  adminEmails: AdminEmail[];
+  onUpdatePassword: (email: string, newPassword: string) => void;
+  onRemoveAdmin: (email: string) => void;
+  ownerPassword: string;
+}
+
+function AdminManagementModal({
+  isOpen,
+  onClose,
+  adminEmails,
+  onUpdatePassword,
+  onRemoveAdmin,
+  ownerPassword,
+}: AdminManagementModalProps) {
+  const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [ownerPasswordInput, setOwnerPasswordInput] = useState("");
+  const [error, setError] = useState("");
+  const [mode, setMode] = useState<"list" | "edit" | "remove">("list");
+
+  const handleEditPassword = (email: string) => {
+    setSelectedEmail(email);
+    setNewPassword("");
+    setConfirmPassword("");
+    setOwnerPasswordInput("");
+    setError("");
+    setMode("edit");
+  };
+
+  const handleRemoveAdmin = (email: string) => {
+    setSelectedEmail(email);
+    setOwnerPasswordInput("");
+    setError("");
+    setMode("remove");
+  };
+
+  const handleSavePassword = () => {
+    if (ownerPasswordInput !== ownerPassword) {
+      setError("Incorrect owner password.");
+      return;
+    }
+    if (!newPassword.trim()) {
+      setError("Password cannot be empty.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    if (selectedEmail) {
+      onUpdatePassword(selectedEmail, newPassword);
+      setMode("list");
+      setSelectedEmail(null);
+      setNewPassword("");
+      setConfirmPassword("");
+      setOwnerPasswordInput("");
+      setError("");
+    }
+  };
+
+  const handleConfirmRemove = () => {
+    if (ownerPasswordInput !== ownerPassword) {
+      setError("Incorrect owner password.");
+      return;
+    }
+    if (selectedEmail) {
+      onRemoveAdmin(selectedEmail);
+      setMode("list");
+      setSelectedEmail(null);
+      setOwnerPasswordInput("");
+      setError("");
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="glass-card-strong rounded-2xl p-8 w-full max-w-2xl my-8 max-h-[80vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          className="text-2xl font-bold mb-2"
+          style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+        >
+          {mode === "list" ? "Manage Admins" : mode === "edit" ? "Change Admin Password" : "Remove Admin"}
+        </h2>
+        <p className="text-sm mb-6" style={{ color: "oklch(0.60 0.02 220)" }}>
+          {mode === "list"
+            ? "View and manage approved admin accounts"
+            : mode === "edit"
+            ? `Set a new password for ${selectedEmail}`
+            : `Remove ${selectedEmail} from admin access`}
+        </p>
+
+        {mode === "list" && (
+          <div className="space-y-3 mb-6">
+            {adminEmails.length === 0 ? (
+              <p style={{ color: "oklch(0.55 0.02 220)" }} className="text-sm text-center py-8">
+                No approved admins.
+              </p>
+            ) : (
+              adminEmails.map((admin) => (
+                <div
+                  key={admin.email}
+                  className="p-4 rounded-lg border flex items-center justify-between"
+                  style={{
+                    background: "oklch(1 0 0 / 5%)",
+                    border: "1px solid oklch(1 0 0 / 10%)",
+                  }}
+                >
+                  <div>
+                    <p
+                      className="text-sm font-semibold"
+                      style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+                    >
+                      {admin.email}
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: "oklch(0.55 0.02 220)" }}>
+                      Added: {new Date(admin.addedAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleEditPassword(admin.email)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                      style={{
+                        background: "oklch(0.65 0.18 200 / 20%)",
+                        color: "oklch(0.75 0.18 200)",
+                        fontFamily: "Sora, sans-serif",
+                      }}
+                    >
+                      Edit Password
+                    </button>
+                    <button
+                      onClick={() => handleRemoveAdmin(admin.email)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                      style={{
+                        background: "oklch(0.62 0.22 25 / 15%)",
+                        color: "oklch(0.70 0.20 25)",
+                        fontFamily: "Sora, sans-serif",
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {mode === "edit" && (
+          <div className="space-y-4 mb-6">
+            <div>
+              <label className="text-xs font-semibold" style={{ color: "oklch(0.75 0.18 200)" }}>
+                New Password
+              </label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => {
+                  setNewPassword(e.target.value);
+                  if (error) setError("");
+                }}
+                placeholder="Enter new password"
+                className="w-full px-4 py-2 rounded-lg text-sm mt-1 outline-none transition-all"
+                style={{
+                  background: "oklch(1 0 0 / 6%)",
+                  border: error ? "1px solid oklch(0.62 0.22 25 / 70%)" : "1px solid oklch(1 0 0 / 12%)",
+                  color: "#E2E8F0",
+                  fontFamily: "DM Sans, sans-serif",
+                }}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold" style={{ color: "oklch(0.75 0.18 200)" }}>
+                Confirm Password
+              </label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  if (error) setError("");
+                }}
+                placeholder="Confirm new password"
+                className="w-full px-4 py-2 rounded-lg text-sm mt-1 outline-none transition-all"
+                style={{
+                  background: "oklch(1 0 0 / 6%)",
+                  border: error ? "1px solid oklch(0.62 0.22 25 / 70%)" : "1px solid oklch(1 0 0 / 12%)",
+                  color: "#E2E8F0",
+                  fontFamily: "DM Sans, sans-serif",
+                }}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold" style={{ color: "oklch(0.75 0.18 200)" }}>
+                Owner Password (to confirm)
+              </label>
+              <input
+                type="password"
+                value={ownerPasswordInput}
+                onChange={(e) => {
+                  setOwnerPasswordInput(e.target.value);
+                  if (error) setError("");
+                }}
+                placeholder="Enter owner password"
+                className="w-full px-4 py-2 rounded-lg text-sm mt-1 outline-none transition-all"
+                style={{
+                  background: "oklch(1 0 0 / 6%)",
+                  border: error ? "1px solid oklch(0.62 0.22 25 / 70%)" : "1px solid oklch(1 0 0 / 12%)",
+                  color: "#E2E8F0",
+                  fontFamily: "DM Sans, sans-serif",
+                }}
+              />
+            </div>
+            {error && (
+              <div className="p-3 rounded-lg" style={{ background: "oklch(0.62 0.22 25 / 15%)", color: "oklch(0.70 0.20 25)" }}>
+                <p className="text-xs font-semibold">{error}</p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setMode("list")}
+                className="flex-1 py-2 rounded-lg text-sm font-semibold transition-all"
+                style={{
+                  background: "oklch(1 0 0 / 8%)",
+                  color: "oklch(0.65 0.02 220)",
+                  fontFamily: "Sora, sans-serif",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSavePassword}
+                className="flex-1 py-2 rounded-lg text-sm font-semibold transition-all"
+                style={{
+                  background: "oklch(0.65 0.18 200)",
+                  color: "#0F172A",
+                  fontFamily: "Sora, sans-serif",
+                }}
+              >
+                Save Password
+              </button>
+            </div>
+          </div>
+        )}
+
+        {mode === "remove" && (
+          <div className="space-y-4 mb-6">
+            <p style={{ color: "oklch(0.70 0.20 25)" }} className="text-sm">
+              This will permanently remove {selectedEmail} from admin access.
+            </p>
+            <div>
+              <label className="text-xs font-semibold" style={{ color: "oklch(0.75 0.18 200)" }}>
+                Owner Password (to confirm)
+              </label>
+              <input
+                type="password"
+                value={ownerPasswordInput}
+                onChange={(e) => {
+                  setOwnerPasswordInput(e.target.value);
+                  if (error) setError("");
+                }}
+                placeholder="Enter owner password"
+                className="w-full px-4 py-2 rounded-lg text-sm mt-1 outline-none transition-all"
+                style={{
+                  background: "oklch(1 0 0 / 6%)",
+                  border: error ? "1px solid oklch(0.62 0.22 25 / 70%)" : "1px solid oklch(1 0 0 / 12%)",
+                  color: "#E2E8F0",
+                  fontFamily: "DM Sans, sans-serif",
+                }}
+              />
+            </div>
+            {error && (
+              <div className="p-3 rounded-lg" style={{ background: "oklch(0.62 0.22 25 / 15%)", color: "oklch(0.70 0.20 25)" }}>
+                <p className="text-xs font-semibold">{error}</p>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setMode("list")}
+                className="flex-1 py-2 rounded-lg text-sm font-semibold transition-all"
+                style={{
+                  background: "oklch(1 0 0 / 8%)",
+                  color: "oklch(0.65 0.02 220)",
+                  fontFamily: "Sora, sans-serif",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmRemove}
+                className="flex-1 py-2 rounded-lg text-sm font-semibold transition-all"
+                style={{
+                  background: "oklch(0.62 0.22 25)",
+                  color: "#fff",
+                  fontFamily: "Sora, sans-serif",
+                }}
+              >
+                Remove Admin
+              </button>
+            </div>
+          </div>
+        )}
+
+        {mode === "list" && (
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all"
+            style={{
+              background: "oklch(1 0 0 / 8%)",
+              color: "oklch(0.65 0.02 220)",
+              fontFamily: "Sora, sans-serif",
+            }}
+          >
+            Close
+          </button>
+        )}
       </div>
     </div>
   );
@@ -2843,6 +3276,7 @@ function VaultPage({ onLock }: { onLock: () => void }) {
   const [showAuditLog, setShowAuditLog] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>(loadPendingApprovals);
   const [showPendingApprovals, setShowPendingApprovals] = useState(false);
+  const [showAdminManagement, setShowAdminManagement] = useState(false);
 
   // Save to localStorage whenever vault data changes
   useEffect(() => {
@@ -3299,6 +3733,22 @@ function VaultPage({ onLock }: { onLock: () => void }) {
         }}
       />
 
+      <AdminManagementModal
+        isOpen={showAdminManagement}
+        onClose={() => setShowAdminManagement(false)}
+        adminEmails={adminEmails}
+        onUpdatePassword={(email, newPassword) => {
+          setAdminPassword(email, newPassword);
+        }}
+        onRemoveAdmin={(email) => {
+          removeAdminPassword(email);
+          const updatedEmails = adminEmails.filter((a) => a.email !== email);
+          setAdminEmails(updatedEmails);
+          saveAdminEmails(updatedEmails);
+        }}
+        ownerPassword={OWNER_PASSWORD}
+      />
+
       {/* Sidebar */}
       <aside
         className="flex-shrink-0 flex flex-col transition-all duration-300"
@@ -3570,6 +4020,26 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                       {pendingApprovals.filter((a) => a.status === "pending").length}
                     </span>
                   )}
+                </button>
+
+                <button
+                  onClick={() => setShowAdminManagement(true)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+                  style={{
+                    background: "oklch(0.65 0.18 145 / 10%)",
+                    color: "oklch(0.75 0.18 145)",
+                    fontFamily: "DM Sans, sans-serif",
+                    border: "1px solid oklch(0.65 0.18 145 / 20%)",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 145 / 15%)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 145 / 10%)";
+                  }}
+                >
+                  <Key size={15} />
+                  <span>Manage Admins</span>
                 </button>
 
                 <button
