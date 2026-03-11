@@ -1,20 +1,23 @@
 /* =============================================================
-   LINK VAULT — Home Page with Edit Mode
+   LINK VAULT — Password-Protected Links & Admin Manager
    Design: Neo-Noir / Glassmorphism Dark
    - Lock screen: password gate to access vault
    - Vault page: sidebar folder nav + main link card grid
-   - Edit mode: second password unlocks admin panel to edit links
-   - Drag-and-drop: reorder links and folders
+   - Protected links: individual links can be password-locked
+   - Edit mode: admin panel to edit links and set passwords
+   - Password manager: view all locked link passwords (admin only)
    - Persistence: localStorage saves all changes
    ============================================================= */
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Eye, EyeOff, Lock, Unlock, ExternalLink, Folder, Search, X, ChevronRight, Shield, LogOut, GripVertical, Edit2, Save, Trash2, Plus, Check } from "lucide-react";
+import { Eye, EyeOff, Lock, Unlock, ExternalLink, Folder, Search, X, ChevronRight, Shield, LogOut, GripVertical, Edit2, Save, Trash2, Check, Key, Copy, AlertCircle } from "lucide-react";
 
 // ─── Configuration ────────────────────────────────────────────
 const VAULT_PASSWORD = "vault2024";
 const ADMIN_PASSWORD = "admin2024";
+const RECOVERY_PASSWORD = "recovery2024";
 const STORAGE_KEY = "link-vault-data";
+const PROTECTED_LINKS_KEY = "link-vault-protected";
 
 // ─── Link Data ────────────────────────────────────────────────
 interface LinkItem {
@@ -31,6 +34,13 @@ interface FolderData {
   icon: string;
   color: string;
   links: LinkItem[];
+}
+
+interface ProtectedLink {
+  linkId: string;
+  password: string;
+  folderName: string;
+  linkTitle: string;
 }
 
 const DEFAULT_VAULT_DATA: FolderData[] = [
@@ -129,6 +139,30 @@ function saveVaultData(data: FolderData[]): void {
   }
 }
 
+function loadProtectedLinks(): Map<string, ProtectedLink> {
+  if (typeof window === "undefined") return new Map();
+  try {
+    const stored = localStorage.getItem(PROTECTED_LINKS_KEY);
+    if (stored) {
+      const data = JSON.parse(stored);
+      return new Map(Object.entries(data));
+    }
+  } catch (e) {
+    console.error("Failed to load protected links:", e);
+  }
+  return new Map();
+}
+
+function saveProtectedLinks(links: Map<string, ProtectedLink>): void {
+  if (typeof window === "undefined") return;
+  try {
+    const obj = Object.fromEntries(links);
+    localStorage.setItem(PROTECTED_LINKS_KEY, JSON.stringify(obj));
+  } catch (e) {
+    console.error("Failed to save protected links:", e);
+  }
+}
+
 // ─── Favicon helper ───────────────────────────────────────────
 function getFaviconUrl(url: string): string {
   try {
@@ -137,6 +171,504 @@ function getFaviconUrl(url: string): string {
   } catch {
     return "";
   }
+}
+
+// ─── Link Password Modal ───────────────────────────────────────
+interface LinkPasswordModalProps {
+  isOpen: boolean;
+  linkTitle: string;
+  onClose: () => void;
+  onSuccess: () => void;
+  requiredPassword: string;
+}
+
+function LinkPasswordModal({ isOpen, linkTitle, onClose, onSuccess, requiredPassword }: LinkPasswordModalProps) {
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [isShaking, setIsShaking] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setPassword("");
+      setError("");
+      setIsShaking(false);
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [isOpen]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password.trim()) return;
+
+    if (password === requiredPassword) {
+      setError("");
+      setPassword("");
+      onSuccess();
+      onClose();
+    } else {
+      setError("Incorrect password.");
+      setIsShaking(true);
+      setPassword("");
+      setTimeout(() => setIsShaking(false), 600);
+      inputRef.current?.focus();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+      onClick={onClose}
+    >
+      <div
+        className={`glass-card-strong rounded-2xl p-8 w-full max-w-md ${isShaking ? "shake" : ""}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <Lock size={18} style={{ color: "oklch(0.70 0.20 25)" }} />
+          <h2
+            className="text-2xl font-bold"
+            style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+          >
+            Locked Link
+          </h2>
+        </div>
+        <p className="text-sm mb-6" style={{ color: "oklch(0.60 0.02 220)" }}>
+          This link is password-protected. Enter the password to access <strong>{linkTitle}</strong>.
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="relative">
+            <input
+              ref={inputRef}
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (error) setError("");
+              }}
+              placeholder="Link password"
+              className="w-full px-4 py-3 pr-12 rounded-xl text-sm outline-none transition-all duration-200"
+              style={{
+                background: "oklch(1 0 0 / 6%)",
+                border: error
+                  ? "1px solid oklch(0.62 0.22 25 / 70%)"
+                  : "1px solid oklch(1 0 0 / 12%)",
+                color: "#E2E8F0",
+                fontFamily: "DM Sans, sans-serif",
+                boxShadow: error
+                  ? "0 0 0 3px oklch(0.62 0.22 25 / 15%)"
+                  : "none",
+              }}
+              onFocus={(e) => {
+                if (!error) {
+                  e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+                  e.target.style.boxShadow = "0 0 0 3px oklch(0.65 0.18 200 / 15%)";
+                }
+              }}
+              onBlur={(e) => {
+                if (!error) {
+                  e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+                  e.target.style.boxShadow = "none";
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded transition-colors duration-150"
+              style={{ color: "oklch(0.55 0.02 220)" }}
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+
+          {error && (
+            <p
+              className="text-xs flex items-center gap-1.5"
+              style={{ color: "oklch(0.70 0.20 25)" }}
+            >
+              <X size={12} />
+              {error}
+            </p>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
+              style={{
+                background: "oklch(1 0 0 / 8%)",
+                color: "oklch(0.65 0.02 220)",
+                fontFamily: "Sora, sans-serif",
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!password.trim()}
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              style={{
+                background: "linear-gradient(135deg, oklch(0.65 0.18 200), oklch(0.55 0.20 215))",
+                color: "#0F172A",
+                fontFamily: "Sora, sans-serif",
+                boxShadow: "0 4px 20px oklch(0.65 0.18 200 / 30%)",
+              }}
+            >
+              <Unlock size={14} />
+              Unlock
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Password Manager Modal ───────────────────────────────────
+interface PasswordManagerModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  protectedLinks: ProtectedLink[];
+}
+
+function PasswordManagerModal({ isOpen, onClose, protectedLinks }: PasswordManagerModalProps) {
+  const [recoveryPassword, setRecoveryPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setRecoveryPassword("");
+      setError("");
+      setIsUnlocked(false);
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [isOpen]);
+
+  const handleUnlock = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (recoveryPassword === RECOVERY_PASSWORD) {
+      setIsUnlocked(true);
+      setError("");
+    } else {
+      setError("Incorrect recovery password.");
+    }
+  };
+
+  const copyToClipboard = (password: string, id: string) => {
+    navigator.clipboard.writeText(password);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="glass-card-strong rounded-2xl p-8 w-full max-w-2xl my-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <Key size={20} style={{ color: "oklch(0.65 0.18 200)" }} />
+          <h2
+            className="text-2xl font-bold"
+            style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+          >
+            Password Manager
+          </h2>
+        </div>
+        <p className="text-sm mb-6" style={{ color: "oklch(0.60 0.02 220)" }}>
+          View and manage all password-protected links
+        </p>
+
+        {!isUnlocked ? (
+          <form onSubmit={handleUnlock} className="space-y-4 mb-6">
+            <div className="relative">
+              <input
+                ref={inputRef}
+                type={showPassword ? "text" : "password"}
+                value={recoveryPassword}
+                onChange={(e) => {
+                  setRecoveryPassword(e.target.value);
+                  if (error) setError("");
+                }}
+                placeholder="Recovery password"
+                className="w-full px-4 py-3 pr-12 rounded-xl text-sm outline-none transition-all"
+                style={{
+                  background: "oklch(1 0 0 / 6%)",
+                  border: error
+                    ? "1px solid oklch(0.62 0.22 25 / 70%)"
+                    : "1px solid oklch(1 0 0 / 12%)",
+                  color: "#E2E8F0",
+                  fontFamily: "DM Sans, sans-serif",
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1"
+                style={{ color: "oklch(0.55 0.02 220)" }}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {error && (
+              <p className="text-xs" style={{ color: "oklch(0.70 0.20 25)" }}>
+                <X size={12} className="inline mr-1" />
+                {error}
+              </p>
+            )}
+            <button
+              type="submit"
+              className="w-full py-2.5 rounded-xl text-sm font-semibold"
+              style={{
+                background: "linear-gradient(135deg, oklch(0.65 0.18 200), oklch(0.55 0.20 215))",
+                color: "#0F172A",
+                fontFamily: "Sora, sans-serif",
+              }}
+            >
+              Unlock Password Manager
+            </button>
+          </form>
+        ) : (
+          <div className="space-y-3 mb-6">
+            {protectedLinks.length === 0 ? (
+              <p
+                className="text-sm text-center py-8"
+                style={{ color: "oklch(0.55 0.02 220)" }}
+              >
+                No password-protected links yet
+              </p>
+            ) : (
+              protectedLinks.map((link) => (
+                <div
+                  key={link.linkId}
+                  className="p-4 rounded-lg"
+                  style={{
+                    background: "oklch(1 0 0 / 5%)",
+                    border: "1px solid oklch(1 0 0 / 10%)",
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className="text-sm font-semibold mb-1"
+                        style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+                      >
+                        {link.linkTitle}
+                      </p>
+                      <p className="text-xs" style={{ color: "oklch(0.55 0.02 220)" }}>
+                        {link.folderName}
+                      </p>
+                      <div
+                        className="mt-2 px-3 py-2 rounded-lg font-mono text-xs break-all"
+                        style={{
+                          background: "oklch(1 0 0 / 8%)",
+                          color: "oklch(0.75 0.18 200)",
+                        }}
+                      >
+                        {link.password}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => copyToClipboard(link.password, link.linkId)}
+                      className="flex-shrink-0 p-2 rounded-lg transition-all duration-200"
+                      style={{
+                        background: copiedId === link.linkId
+                          ? "oklch(0.65 0.18 145 / 20%)"
+                          : "oklch(1 0 0 / 8%)",
+                        color: copiedId === link.linkId
+                          ? "oklch(0.75 0.18 145)"
+                          : "oklch(0.55 0.02 220)",
+                      }}
+                      title="Copy password"
+                    >
+                      {copiedId === link.linkId ? <Check size={16} /> : <Copy size={16} />}
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        <button
+          onClick={onClose}
+          className="w-full py-2.5 rounded-xl text-sm font-semibold"
+          style={{
+            background: "oklch(1 0 0 / 8%)",
+            color: "oklch(0.65 0.02 220)",
+            fontFamily: "Sora, sans-serif",
+          }}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Set Link Password Modal ───────────────────────────────────
+interface SetLinkPasswordModalProps {
+  isOpen: boolean;
+  link: LinkItem | null;
+  currentPassword: string | null;
+  onClose: () => void;
+  onSave: (password: string | null) => void;
+}
+
+function SetLinkPasswordModal({ isOpen, link, currentPassword, onClose, onSave }: SetLinkPasswordModalProps) {
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [removeProtection, setRemoveProtection] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setPassword(currentPassword || "");
+      setShowPassword(false);
+      setRemoveProtection(false);
+    }
+  }, [isOpen, currentPassword]);
+
+  const handleSave = () => {
+    if (removeProtection) {
+      onSave(null);
+    } else if (password.trim()) {
+      onSave(password.trim());
+    }
+    onClose();
+  };
+
+  if (!isOpen || !link) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+      onClick={onClose}
+    >
+      <div
+        className="glass-card-strong rounded-2xl p-8 w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          className="text-2xl font-bold mb-2"
+          style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+        >
+          Link Protection
+        </h2>
+        <p className="text-sm mb-6" style={{ color: "oklch(0.60 0.02 220)" }}>
+          Set a password for <strong>{link.title}</strong>
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <label
+              className="block text-xs font-semibold mb-2 uppercase tracking-widest"
+              style={{ fontFamily: "Sora, sans-serif", color: "oklch(0.65 0.02 220)" }}
+            >
+              Password (leave empty to remove protection)
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setRemoveProtection(false);
+                }}
+                placeholder="Enter password or leave blank"
+                className="w-full px-4 py-3 pr-12 rounded-xl text-sm outline-none transition-all"
+                style={{
+                  background: "oklch(1 0 0 / 6%)",
+                  border: "1px solid oklch(1 0 0 / 12%)",
+                  color: "#E2E8F0",
+                  fontFamily: "DM Sans, sans-serif",
+                }}
+                onFocus={(e) => {
+                  e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1"
+                style={{ color: "oklch(0.55 0.02 220)" }}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+
+          {currentPassword && (
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={removeProtection}
+                onChange={(e) => {
+                  setRemoveProtection(e.target.checked);
+                  if (e.target.checked) setPassword("");
+                }}
+                className="w-4 h-4 rounded"
+                style={{
+                  background: removeProtection ? "oklch(0.65 0.18 200)" : "oklch(1 0 0 / 8%)",
+                  border: "1px solid oklch(1 0 0 / 12%)",
+                  cursor: "pointer",
+                }}
+              />
+              <span className="text-sm" style={{ color: "oklch(0.65 0.02 220)" }}>
+                Remove password protection
+              </span>
+            </label>
+          )}
+        </div>
+
+        <div className="flex gap-3 mt-8">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+            style={{
+              background: "oklch(1 0 0 / 8%)",
+              color: "oklch(0.65 0.02 220)",
+              fontFamily: "Sora, sans-serif",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+            style={{
+              background: "linear-gradient(135deg, oklch(0.65 0.18 200), oklch(0.55 0.20 215))",
+              color: "#0F172A",
+              fontFamily: "Sora, sans-serif",
+            }}
+          >
+            <Save size={14} />
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Admin Password Modal ──────────────────────────────────────
@@ -212,7 +744,7 @@ function AdminPasswordModal({ isOpen, onClose, onSuccess }: AdminPasswordModalPr
                 if (error) setError("");
               }}
               placeholder="Admin password"
-              className="w-full px-4 py-3 pr-12 rounded-xl text-sm outline-none transition-all duration-200"
+              className="w-full px-4 py-3 pr-12 rounded-xl text-sm outline-none transition-all"
               style={{
                 background: "oklch(1 0 0 / 6%)",
                 border: error
@@ -220,27 +752,22 @@ function AdminPasswordModal({ isOpen, onClose, onSuccess }: AdminPasswordModalPr
                   : "1px solid oklch(1 0 0 / 12%)",
                 color: "#E2E8F0",
                 fontFamily: "DM Sans, sans-serif",
-                boxShadow: error
-                  ? "0 0 0 3px oklch(0.62 0.22 25 / 15%)"
-                  : "none",
               }}
               onFocus={(e) => {
                 if (!error) {
                   e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
-                  e.target.style.boxShadow = "0 0 0 3px oklch(0.65 0.18 200 / 15%)";
                 }
               }}
               onBlur={(e) => {
                 if (!error) {
                   e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
-                  e.target.style.boxShadow = "none";
                 }
               }}
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded transition-colors duration-150"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1"
               style={{ color: "oklch(0.55 0.02 220)" }}
               tabIndex={-1}
             >
@@ -249,11 +776,8 @@ function AdminPasswordModal({ isOpen, onClose, onSuccess }: AdminPasswordModalPr
           </div>
 
           {error && (
-            <p
-              className="text-xs flex items-center gap-1.5"
-              style={{ color: "oklch(0.70 0.20 25)" }}
-            >
-              <X size={12} />
+            <p className="text-xs" style={{ color: "oklch(0.70 0.20 25)" }}>
+              <X size={12} className="inline mr-1" />
               {error}
             </p>
           )}
@@ -262,17 +786,11 @@ function AdminPasswordModal({ isOpen, onClose, onSuccess }: AdminPasswordModalPr
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200"
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
               style={{
                 background: "oklch(1 0 0 / 8%)",
                 color: "oklch(0.65 0.02 220)",
                 fontFamily: "Sora, sans-serif",
-              }}
-              onMouseEnter={(e) => {
-                (e.target as HTMLButtonElement).style.background = "oklch(1 0 0 / 12%)";
-              }}
-              onMouseLeave={(e) => {
-                (e.target as HTMLButtonElement).style.background = "oklch(1 0 0 / 8%)";
               }}
             >
               Cancel
@@ -280,22 +798,14 @@ function AdminPasswordModal({ isOpen, onClose, onSuccess }: AdminPasswordModalPr
             <button
               type="submit"
               disabled={!password.trim()}
-              className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 disabled:opacity-50"
+              className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
               style={{
                 background: "linear-gradient(135deg, oklch(0.65 0.18 200), oklch(0.55 0.20 215))",
                 color: "#0F172A",
                 fontFamily: "Sora, sans-serif",
-                boxShadow: "0 4px 20px oklch(0.65 0.18 200 / 30%)",
-              }}
-              onMouseEnter={(e) => {
-                (e.target as HTMLButtonElement).style.boxShadow =
-                  "0 4px 30px oklch(0.65 0.18 200 / 50%)";
-              }}
-              onMouseLeave={(e) => {
-                (e.target as HTMLButtonElement).style.boxShadow =
-                  "0 4px 20px oklch(0.65 0.18 200 / 30%)";
               }}
             >
+              <Unlock size={14} />
               Unlock
             </button>
           </div>
@@ -309,12 +819,14 @@ function AdminPasswordModal({ isOpen, onClose, onSuccess }: AdminPasswordModalPr
 interface EditLinkModalProps {
   isOpen: boolean;
   link: LinkItem | null;
+  isProtected: boolean;
   onClose: () => void;
   onSave: (link: LinkItem) => void;
   onDelete: () => void;
+  onSetPassword: () => void;
 }
 
-function EditLinkModal({ isOpen, link, onClose, onSave, onDelete }: EditLinkModalProps) {
+function EditLinkModal({ isOpen, link, isProtected, onClose, onSave, onDelete, onSetPassword }: EditLinkModalProps) {
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [description, setDescription] = useState("");
@@ -438,6 +950,36 @@ function EditLinkModal({ isOpen, link, onClose, onSave, onDelete }: EditLinkModa
               }}
             />
           </div>
+
+          <button
+            onClick={onSetPassword}
+            className="w-full py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all"
+            style={{
+              background: isProtected
+                ? "oklch(0.65 0.18 200 / 15%)"
+                : "oklch(1 0 0 / 8%)",
+              color: isProtected
+                ? "oklch(0.75 0.18 200)"
+                : "oklch(0.65 0.02 220)",
+              fontFamily: "Sora, sans-serif",
+              border: isProtected
+                ? "1px solid oklch(0.65 0.18 200 / 30%)"
+                : "1px solid transparent",
+            }}
+            onMouseEnter={(e) => {
+              if (!isProtected) {
+                (e.target as HTMLButtonElement).style.background = "oklch(1 0 0 / 12%)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isProtected) {
+                (e.target as HTMLButtonElement).style.background = "oklch(1 0 0 / 8%)";
+              }
+            }}
+          >
+            <Lock size={14} />
+            {isProtected ? "Password Protected" : "Set Password"}
+          </button>
         </div>
 
         <div className="flex gap-3 mt-8">
@@ -448,12 +990,6 @@ function EditLinkModal({ isOpen, link, onClose, onSave, onDelete }: EditLinkModa
               background: "oklch(0.62 0.22 25 / 15%)",
               color: "oklch(0.70 0.20 25)",
               fontFamily: "Sora, sans-serif",
-            }}
-            onMouseEnter={(e) => {
-              (e.target as HTMLButtonElement).style.background = "oklch(0.62 0.22 25 / 25%)";
-            }}
-            onMouseLeave={(e) => {
-              (e.target as HTMLButtonElement).style.background = "oklch(0.62 0.22 25 / 15%)";
             }}
           >
             <Trash2 size={14} />
@@ -467,32 +1003,17 @@ function EditLinkModal({ isOpen, link, onClose, onSave, onDelete }: EditLinkModa
               color: "oklch(0.65 0.02 220)",
               fontFamily: "Sora, sans-serif",
             }}
-            onMouseEnter={(e) => {
-              (e.target as HTMLButtonElement).style.background = "oklch(1 0 0 / 12%)";
-            }}
-            onMouseLeave={(e) => {
-              (e.target as HTMLButtonElement).style.background = "oklch(1 0 0 / 8%)";
-            }}
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={!title.trim() || !url.trim()}
-            className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
             style={{
               background: "linear-gradient(135deg, oklch(0.65 0.18 200), oklch(0.55 0.20 215))",
               color: "#0F172A",
               fontFamily: "Sora, sans-serif",
-              boxShadow: "0 4px 20px oklch(0.65 0.18 200 / 30%)",
-            }}
-            onMouseEnter={(e) => {
-              (e.target as HTMLButtonElement).style.boxShadow =
-                "0 4px 30px oklch(0.65 0.18 200 / 50%)";
-            }}
-            onMouseLeave={(e) => {
-              (e.target as HTMLButtonElement).style.boxShadow =
-                "0 4px 20px oklch(0.65 0.18 200 / 30%)";
             }}
           >
             <Save size={14} />
@@ -507,64 +1028,107 @@ function EditLinkModal({ isOpen, link, onClose, onSave, onDelete }: EditLinkModa
 // ─── Draggable Link Card ───────────────────────────────────────
 interface LinkCardProps {
   link: LinkItem;
+  folderName: string;
+  isProtected: boolean;
   onDragStart: (e: React.DragEvent<HTMLAnchorElement>, linkId: string) => void;
   onDragOver: (e: React.DragEvent<HTMLAnchorElement>) => void;
   onDrop: (e: React.DragEvent<HTMLAnchorElement>, linkId: string) => void;
   isDragging?: boolean;
   isEditMode?: boolean;
   onEdit?: (link: LinkItem) => void;
+  onClickLocked?: () => void;
 }
 
-function LinkCard({ link, onDragStart, onDragOver, onDrop, isDragging, isEditMode, onEdit }: LinkCardProps) {
+function LinkCard({
+  link,
+  folderName,
+  isProtected,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  isDragging,
+  isEditMode,
+  onEdit,
+  onClickLocked,
+}: LinkCardProps) {
   const [imgError, setImgError] = useState(false);
+
+  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (isEditMode) {
+      e.preventDefault();
+      onEdit?.(link);
+    } else if (isProtected) {
+      e.preventDefault();
+      onClickLocked?.();
+    }
+  };
 
   return (
     <a
-      href={isEditMode ? undefined : link.url}
-      target={isEditMode ? undefined : "_blank"}
-      rel={isEditMode ? undefined : "noopener noreferrer"}
-      draggable={!isEditMode}
-      onDragStart={(e) => !isEditMode && onDragStart(e, link.id)}
-      onDragOver={(e) => !isEditMode && onDragOver(e)}
-      onDrop={(e) => !isEditMode && onDrop(e, link.id)}
-      onClick={(e) => {
-        if (isEditMode) {
-          e.preventDefault();
-          onEdit?.(link);
-        }
-      }}
+      href={isEditMode || isProtected ? undefined : link.url}
+      target={isEditMode || isProtected ? undefined : "_blank"}
+      rel={isEditMode || isProtected ? undefined : "noopener noreferrer"}
+      draggable={!isEditMode && !isProtected}
+      onDragStart={(e) => !isEditMode && !isProtected && onDragStart(e, link.id)}
+      onDragOver={(e) => !isEditMode && !isProtected && onDragOver(e)}
+      onDrop={(e) => !isEditMode && !isProtected && onDrop(e, link.id)}
+      onClick={handleClick}
       className="group block rounded-xl p-4 transition-all duration-200 animate-fade-in-up relative"
       style={{
         background: "oklch(1 0 0 / 4%)",
-        border: "1px solid oklch(1 0 0 / 8%)",
+        border: isProtected
+          ? "1px solid oklch(0.70 0.20 25 / 40%)"
+          : "1px solid oklch(1 0 0 / 8%)",
         opacity: isDragging ? 0.5 : 1,
-        cursor: isEditMode ? "pointer" : "default",
+        cursor: isEditMode || isProtected ? "pointer" : "default",
       }}
       onMouseEnter={(e) => {
         const el = e.currentTarget;
         el.style.background = "oklch(1 0 0 / 7%)";
-        el.style.border = "1px solid oklch(0.65 0.18 200 / 35%)";
-        el.style.boxShadow = "0 4px 20px oklch(0.65 0.18 200 / 12%)";
+        el.style.border = isProtected
+          ? "1px solid oklch(0.70 0.20 25 / 60%)"
+          : "1px solid oklch(0.65 0.18 200 / 35%)";
+        el.style.boxShadow = isProtected
+          ? "0 4px 20px oklch(0.70 0.20 25 / 12%)"
+          : "0 4px 20px oklch(0.65 0.18 200 / 12%)";
         el.style.transform = "translateY(-2px)";
       }}
       onMouseLeave={(e) => {
         const el = e.currentTarget;
         el.style.background = "oklch(1 0 0 / 4%)";
-        el.style.border = "1px solid oklch(1 0 0 / 8%)";
+        el.style.border = isProtected
+          ? "1px solid oklch(0.70 0.20 25 / 40%)"
+          : "1px solid oklch(1 0 0 / 8%)";
         el.style.boxShadow = "none";
         el.style.transform = "translateY(0)";
       }}
     >
-      {/* Drag handle or edit icon */}
+      {/* Lock icon or drag handle */}
       <div
         className="absolute top-2 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none"
         style={{
-          background: "oklch(0.65 0.18 200 / 15%)",
-          color: "oklch(0.65 0.18 200)",
+          background: isProtected
+            ? "oklch(0.70 0.20 25 / 20%)"
+            : "oklch(0.65 0.18 200 / 15%)",
+          color: isProtected
+            ? "oklch(0.70 0.20 25)"
+            : "oklch(0.65 0.18 200)",
         }}
-        title={isEditMode ? "Click to edit" : "Drag to reorder"}
+        title={
+          isEditMode
+            ? "Click to edit"
+            : isProtected
+              ? "Click to unlock"
+              : "Drag to reorder"
+        }
       >
-        {isEditMode ? <Edit2 size={14} /> : <GripVertical size={14} />}
+        {isProtected ? (
+          <Lock size={14} />
+        ) : isEditMode ? (
+          <Edit2 size={14} />
+        ) : (
+          <GripVertical size={14} />
+        )}
       </div>
 
       <div className="flex items-start gap-3">
@@ -594,7 +1158,7 @@ function LinkCard({ link, onDragStart, onDragOver, onDrop, isDragging, isEditMod
             >
               {link.title}
             </span>
-            {!isEditMode && (
+            {!isEditMode && !isProtected && (
               <ExternalLink
                 size={11}
                 className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
@@ -799,6 +1363,7 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
 // ─── Vault Page ───────────────────────────────────────────────
 function VaultPage({ onLock }: { onLock: () => void }) {
   const [vaultData, setVaultData] = useState<FolderData[]>(loadVaultData);
+  const [protectedLinks, setProtectedLinks] = useState<Map<string, ProtectedLink>>(loadProtectedLinks);
   const [activeFolder, setActiveFolder] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -808,11 +1373,19 @@ function VaultPage({ onLock }: { onLock: () => void }) {
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [editingLink, setEditingLink] = useState<LinkItem | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [lockedLinkId, setLockedLinkId] = useState<string | null>(null);
+  const [showSetPasswordModal, setShowSetPasswordModal] = useState(false);
+  const [showPasswordManager, setShowPasswordManager] = useState(false);
 
   // Save to localStorage whenever vault data changes
   useEffect(() => {
     saveVaultData(vaultData);
   }, [vaultData]);
+
+  useEffect(() => {
+    saveProtectedLinks(protectedLinks);
+  }, [protectedLinks]);
 
   const allLinks = useMemo(
     () => vaultData.flatMap((f) => f.links.map((l) => ({ ...l, folderId: f.id }))),
@@ -879,7 +1452,53 @@ function VaultPage({ onLock }: { onLock: () => void }) {
       links: folder.links.filter((link) => link.id !== editingLink.id),
     }));
     setVaultData(updatedFolders);
+    // Also remove from protected links
+    const newProtected = new Map(protectedLinks);
+    newProtected.delete(editingLink.id);
+    setProtectedLinks(newProtected);
     setShowEditModal(false);
+  };
+
+  const handleSetPassword = () => {
+    if (editingLink) {
+      setLockedLinkId(editingLink.id);
+      setShowSetPasswordModal(true);
+    }
+  };
+
+  const handleSavePassword = (password: string | null) => {
+    if (!editingLink) return;
+    const newProtected = new Map(protectedLinks);
+    if (password) {
+      const folder = vaultData.find((f) =>
+        f.links.some((l) => l.id === editingLink.id)
+      );
+      newProtected.set(editingLink.id, {
+        linkId: editingLink.id,
+        password,
+        folderName: folder?.name || "Unknown",
+        linkTitle: editingLink.title,
+      });
+    } else {
+      newProtected.delete(editingLink.id);
+    }
+    setProtectedLinks(newProtected);
+    setShowSetPasswordModal(false);
+  };
+
+  const handleClickLockedLink = (linkId: string) => {
+    setLockedLinkId(linkId);
+    setShowPasswordModal(true);
+  };
+
+  const handleUnlockLink = () => {
+    if (lockedLinkId) {
+      const link = allLinks.find((l) => l.id === lockedLinkId);
+      if (link) {
+        window.open(link.url, "_blank");
+      }
+    }
+    setShowPasswordModal(false);
   };
 
   // Handle link drag and drop
@@ -953,25 +1572,54 @@ function VaultPage({ onLock }: { onLock: () => void }) {
     setDraggedFolderId(null);
   };
 
+  const lockedLink = lockedLinkId
+    ? protectedLinks.get(lockedLinkId)
+    : null;
+
+  const protectedLinksList = Array.from(protectedLinks.values());
+
   return (
     <div
       className="min-h-screen flex animate-unlock-reveal"
       style={{ background: "#0F172A" }}
     >
-      {/* Admin Password Modal */}
+      {/* Modals */}
       <AdminPasswordModal
         isOpen={showAdminModal}
         onClose={() => setShowAdminModal(false)}
         onSuccess={handleAdminUnlock}
       />
 
-      {/* Edit Link Modal */}
       <EditLinkModal
         isOpen={showEditModal}
         link={editingLink}
+        isProtected={editingLink ? protectedLinks.has(editingLink.id) : false}
         onClose={() => setShowEditModal(false)}
         onSave={handleSaveLink}
         onDelete={handleDeleteLink}
+        onSetPassword={handleSetPassword}
+      />
+
+      <SetLinkPasswordModal
+        isOpen={showSetPasswordModal}
+        link={editingLink}
+        currentPassword={editingLink ? protectedLinks.get(editingLink.id)?.password ?? null : null}
+        onClose={() => setShowSetPasswordModal(false)}
+        onSave={handleSavePassword}
+      />
+
+      <LinkPasswordModal
+        isOpen={showPasswordModal}
+        linkTitle={allLinks.find((l) => l.id === lockedLinkId)?.title || "Link"}
+        onClose={() => setShowPasswordModal(false)}
+        onSuccess={handleUnlockLink}
+        requiredPassword={lockedLink?.password || ""}
+      />
+
+      <PasswordManagerModal
+        isOpen={showPasswordManager}
+        onClose={() => setShowPasswordManager(false)}
+        protectedLinks={protectedLinksList}
       />
 
       {/* Sidebar */}
@@ -1093,6 +1741,28 @@ function VaultPage({ onLock }: { onLock: () => void }) {
             className="p-4 mt-auto border-t space-y-2"
             style={{ borderColor: "oklch(1 0 0 / 8%)" }}
           >
+            {isEditMode && (
+              <button
+                onClick={() => setShowPasswordManager(true)}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+                style={{
+                  background: "oklch(0.65 0.18 200 / 10%)",
+                  color: "oklch(0.75 0.18 200)",
+                  fontFamily: "DM Sans, sans-serif",
+                  border: "1px solid oklch(0.65 0.18 200 / 20%)",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 200 / 15%)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 200 / 10%)";
+                }}
+              >
+                <Key size={15} />
+                <span>Password Manager</span>
+              </button>
+            )}
+
             <button
               onClick={() => setShowAdminModal(true)}
               className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
@@ -1335,9 +2005,12 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                       <LinkCard
                         key={link.id}
                         link={link}
+                        folderName={folder.name}
+                        isProtected={protectedLinks.has(link.id)}
                         onDragStart={() => {}}
                         onDragOver={() => {}}
                         onDrop={() => {}}
+                        onClickLocked={() => handleClickLockedLink(link.id)}
                       />
                     ))}
                   </div>
@@ -1360,12 +2033,19 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                   <LinkCard
                     key={link.id}
                     link={link}
+                    folderName={
+                      vaultData.find((f) =>
+                        f.links.some((l) => l.id === link.id)
+                      )?.name || "Unknown"
+                    }
+                    isProtected={protectedLinks.has(link.id)}
                     onDragStart={handleLinkDragStart}
                     onDragOver={handleLinkDragOver}
                     onDrop={handleLinkDrop}
                     isDragging={draggedLinkId === link.id}
                     isEditMode={isEditMode}
                     onEdit={handleEditLink}
+                    onClickLocked={() => handleClickLockedLink(link.id)}
                   />
                 ))}
               </div>
