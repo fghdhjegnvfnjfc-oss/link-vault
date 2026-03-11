@@ -10,7 +10,7 @@
    ============================================================= */
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Eye, EyeOff, Lock, Unlock, ExternalLink, Folder, Search, X, ChevronRight, Shield, LogOut, GripVertical, Edit2, Save, Trash2, Check, Key, Copy, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Lock, Unlock, ExternalLink, Folder, Search, X, ChevronRight, Shield, LogOut, GripVertical, Edit2, Save, Trash2, Check, Key, Copy, AlertCircle, Plus, Trash } from "lucide-react";
 
 // ─── Configuration ────────────────────────────────────────────
 const VAULT_PASSWORD = "vault2024";
@@ -518,6 +518,354 @@ function PasswordManagerModal({ isOpen, onClose, protectedLinks }: PasswordManag
         >
           Close
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Add New Link Modal ───────────────────────────────────────
+interface AddNewLinkModalProps {
+  isOpen: boolean;
+  folderId: string;
+  folderName: string;
+  onClose: () => void;
+  onSave: (link: LinkItem) => void;
+}
+
+function AddNewLinkModal({ isOpen, folderId, folderName, onClose, onSave }: AddNewLinkModalProps) {
+  const [title, setTitle] = useState("");
+  const [url, setUrl] = useState("");
+  const [description, setDescription] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTitle("");
+      setUrl("");
+      setDescription("");
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [isOpen]);
+
+  const handleSave = () => {
+    if (title.trim() && url.trim()) {
+      const newLink: LinkItem = {
+        id: `link-${Date.now()}`,
+        title: title.trim(),
+        url: url.trim(),
+        description: description.trim(),
+      };
+      onSave(newLink);
+      setTitle("");
+      setUrl("");
+      setDescription("");
+      onClose();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+      onClick={onClose}
+    >
+      <div
+        className="glass-card-strong rounded-2xl p-8 w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          className="text-2xl font-bold mb-2"
+          style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+        >
+          Add New Link
+        </h2>
+        <p className="text-sm mb-6" style={{ color: "oklch(0.60 0.02 220)" }}>
+          Add a new link to <strong>{folderName}</strong>
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <label
+              className="block text-xs font-semibold mb-2 uppercase tracking-widest"
+              style={{ fontFamily: "Sora, sans-serif", color: "oklch(0.65 0.02 220)" }}
+            >
+              Title
+            </label>
+            <input
+              ref={inputRef}
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Link title"
+              className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
+              style={{
+                background: "oklch(1 0 0 / 6%)",
+                border: "1px solid oklch(1 0 0 / 12%)",
+                color: "#E2E8F0",
+                fontFamily: "DM Sans, sans-serif",
+              }}
+              onFocus={(e) => {
+                e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+              }}
+              onBlur={(e) => {
+                e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+              }}
+            />
+          </div>
+
+          <div>
+            <label
+              className="block text-xs font-semibold mb-2 uppercase tracking-widest"
+              style={{ fontFamily: "Sora, sans-serif", color: "oklch(0.65 0.02 220)" }}
+            >
+              URL
+            </label>
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://example.com"
+              className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
+              style={{
+                background: "oklch(1 0 0 / 6%)",
+                border: "1px solid oklch(1 0 0 / 12%)",
+                color: "#E2E8F0",
+                fontFamily: "DM Sans, sans-serif",
+              }}
+              onFocus={(e) => {
+                e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+              }}
+              onBlur={(e) => {
+                e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+              }}
+            />
+          </div>
+
+          <div>
+            <label
+              className="block text-xs font-semibold mb-2 uppercase tracking-widest"
+              style={{ fontFamily: "Sora, sans-serif", color: "oklch(0.65 0.02 220)" }}
+            >
+              Description
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Brief description of the link"
+              rows={3}
+              className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all resize-none"
+              style={{
+                background: "oklch(1 0 0 / 6%)",
+                border: "1px solid oklch(1 0 0 / 12%)",
+                color: "#E2E8F0",
+                fontFamily: "DM Sans, sans-serif",
+              }}
+              onFocus={(e) => {
+                e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+              }}
+              onBlur={(e) => {
+                e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3 mt-8">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
+            style={{
+              background: "oklch(1 0 0 / 8%)",
+              color: "oklch(0.65 0.02 220)",
+              fontFamily: "Sora, sans-serif",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!title.trim() || !url.trim()}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+            style={{
+              background: "linear-gradient(135deg, oklch(0.65 0.18 200), oklch(0.55 0.20 215))",
+              color: "#0F172A",
+              fontFamily: "Sora, sans-serif",
+            }}
+          >
+            <Plus size={14} />
+            Add Link
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Edit Folder Modal ────────────────────────────────────────
+interface EditFolderModalProps {
+  isOpen: boolean;
+  folder: FolderData | null;
+  onClose: () => void;
+  onSave: (folder: FolderData) => void;
+  onDelete: () => void;
+}
+
+function EditFolderModal({ isOpen, folder, onClose, onSave, onDelete }: EditFolderModalProps) {
+  const [name, setName] = useState("");
+  const [icon, setIcon] = useState("");
+  const emojiSuggestions = ["⚡", "🛠", "🎨", "📚", "🔧", "📰", "🌟", "💡", "🚀", "📱", "🎯", "🔐", "📊", "🎬", "🎵", "📸", "🌐", "💼", "🏆", "⭐"];
+
+  useEffect(() => {
+    if (folder) {
+      setName(folder.name);
+      setIcon(folder.icon);
+    }
+  }, [folder, isOpen]);
+
+  const handleSave = () => {
+    if (folder && name.trim() && icon.trim()) {
+      onSave({
+        ...folder,
+        name: name.trim(),
+        icon: icon.trim(),
+      });
+      onClose();
+    }
+  };
+
+  if (!isOpen || !folder) return null;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="glass-card-strong rounded-2xl p-8 w-full max-w-md my-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2
+          className="text-2xl font-bold mb-6"
+          style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
+        >
+          Edit Folder
+        </h2>
+
+        <div className="space-y-4">
+          <div>
+            <label
+              className="block text-xs font-semibold mb-2 uppercase tracking-widest"
+              style={{ fontFamily: "Sora, sans-serif", color: "oklch(0.65 0.02 220)" }}
+            >
+              Folder Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
+              style={{
+                background: "oklch(1 0 0 / 6%)",
+                border: "1px solid oklch(1 0 0 / 12%)",
+                color: "#E2E8F0",
+                fontFamily: "DM Sans, sans-serif",
+              }}
+              onFocus={(e) => {
+                e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+              }}
+              onBlur={(e) => {
+                e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+              }}
+            />
+          </div>
+
+          <div>
+            <label
+              className="block text-xs font-semibold mb-2 uppercase tracking-widest"
+              style={{ fontFamily: "Sora, sans-serif", color: "oklch(0.65 0.02 220)" }}
+            >
+              Folder Icon
+            </label>
+            <div className="mb-3">
+              <input
+                type="text"
+                value={icon}
+                onChange={(e) => setIcon(e.target.value)}
+                placeholder="Paste an emoji"
+                maxLength={2}
+                className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all text-center text-lg"
+                style={{
+                  background: "oklch(1 0 0 / 6%)",
+                  border: "1px solid oklch(1 0 0 / 12%)",
+                  color: "#E2E8F0",
+                  fontFamily: "DM Sans, sans-serif",
+                }}
+                onFocus={(e) => {
+                  e.target.style.border = "1px solid oklch(0.65 0.18 200 / 60%)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.border = "1px solid oklch(1 0 0 / 12%)";
+                }}
+              />
+            </div>
+            <div className="grid grid-cols-5 gap-2">
+              {emojiSuggestions.map((emoji) => (
+                <button
+                  key={emoji}
+                  onClick={() => setIcon(emoji)}
+                  className="p-2 rounded-lg text-lg transition-all"
+                  style={{
+                    background: icon === emoji ? "oklch(0.65 0.18 200 / 20%)" : "oklch(1 0 0 / 8%)",
+                    border: icon === emoji ? "1px solid oklch(0.65 0.18 200 / 40%)" : "1px solid transparent",
+                  }}
+                  title={emoji}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-3 mt-8">
+          <button
+            onClick={onDelete}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2"
+            style={{
+              background: "oklch(0.62 0.22 25 / 15%)",
+              color: "oklch(0.70 0.20 25)",
+              fontFamily: "Sora, sans-serif",
+            }}
+          >
+            <Trash size={14} />
+            Delete
+          </button>
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
+            style={{
+              background: "oklch(1 0 0 / 8%)",
+              color: "oklch(0.65 0.02 220)",
+              fontFamily: "Sora, sans-serif",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!name.trim() || !icon.trim()}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+            style={{
+              background: "linear-gradient(135deg, oklch(0.65 0.18 200), oklch(0.55 0.20 215))",
+              color: "#0F172A",
+              fontFamily: "Sora, sans-serif",
+            }}
+          >
+            <Save size={14} />
+            Save
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1377,6 +1725,9 @@ function VaultPage({ onLock }: { onLock: () => void }) {
   const [lockedLinkId, setLockedLinkId] = useState<string | null>(null);
   const [showSetPasswordModal, setShowSetPasswordModal] = useState(false);
   const [showPasswordManager, setShowPasswordManager] = useState(false);
+  const [showAddLinkModal, setShowAddLinkModal] = useState(false);
+  const [showEditFolderModal, setShowEditFolderModal] = useState(false);
+  const [editingFolder, setEditingFolder] = useState<FolderData | null>(null);
 
   // Save to localStorage whenever vault data changes
   useEffect(() => {
@@ -1501,6 +1852,38 @@ function VaultPage({ onLock }: { onLock: () => void }) {
     setShowPasswordModal(false);
   };
 
+  const handleAddNewLink = (link: LinkItem) => {
+    const updatedFolders = vaultData.map((folder) =>
+      folder.id === activeFolder
+        ? { ...folder, links: [...folder.links, link] }
+        : folder
+    );
+    setVaultData(updatedFolders);
+    setShowAddLinkModal(false);
+  };
+
+  const handleEditFolder = (folder: FolderData) => {
+    setEditingFolder(folder);
+    setShowEditFolderModal(true);
+  };
+
+  const handleSaveFolder = (updatedFolder: FolderData) => {
+    const updatedFolders = vaultData.map((folder) =>
+      folder.id === updatedFolder.id ? updatedFolder : folder
+    );
+    setVaultData(updatedFolders);
+    setShowEditFolderModal(false);
+  };
+
+  const handleDeleteFolder = () => {
+    if (editingFolder) {
+      const updatedFolders = vaultData.filter((f) => f.id !== editingFolder.id);
+      setVaultData(updatedFolders);
+      setActiveFolder("all");
+      setShowEditFolderModal(false);
+    }
+  };
+
   // Handle link drag and drop
   const handleLinkDragStart = (e: React.DragEvent<HTMLAnchorElement>, linkId: string) => {
     e.preventDefault();
@@ -1622,6 +2005,22 @@ function VaultPage({ onLock }: { onLock: () => void }) {
         protectedLinks={protectedLinksList}
       />
 
+      <AddNewLinkModal
+        isOpen={showAddLinkModal}
+        folderId={activeFolder}
+        folderName={activeFolderData?.name || ""}
+        onClose={() => setShowAddLinkModal(false)}
+        onSave={handleAddNewLink}
+      />
+
+      <EditFolderModal
+        isOpen={showEditFolderModal}
+        folder={editingFolder}
+        onClose={() => setShowEditFolderModal(false)}
+        onSave={handleSaveFolder}
+        onDelete={handleDeleteFolder}
+      />
+
       {/* Sidebar */}
       <aside
         className="flex-shrink-0 flex flex-col transition-all duration-300"
@@ -1644,7 +2043,7 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                 className="text-base font-bold"
                 style={{ fontFamily: "Sora, sans-serif", color: "#E2E8F0" }}
               >
-                Link Vault
+                Website Library - Made by Brayden
               </span>
             </div>
 
@@ -1732,6 +2131,19 @@ function VaultPage({ onLock }: { onLock: () => void }) {
                       style={{ color: "oklch(0.65 0.18 200)" }}
                     />
                   )}
+                  {isEditMode && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditFolder(folder);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex-shrink-0 p-1 rounded"
+                      style={{ color: "oklch(0.65 0.18 200)" }}
+                      title="Edit folder"
+                    >
+                      <Edit2 size={12} />
+                    </button>
+                  )}
                 </button>
               ))}
             </nav>
@@ -1741,6 +2153,28 @@ function VaultPage({ onLock }: { onLock: () => void }) {
             className="p-4 mt-auto border-t space-y-2"
             style={{ borderColor: "oklch(1 0 0 / 8%)" }}
           >
+            {isEditMode && activeFolder !== "all" && (
+              <button
+                onClick={() => setShowAddLinkModal(true)}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-all duration-150"
+                style={{
+                  background: "oklch(0.65 0.18 145 / 10%)",
+                  color: "oklch(0.75 0.18 145)",
+                  fontFamily: "DM Sans, sans-serif",
+                  border: "1px solid oklch(0.65 0.18 145 / 20%)",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 145 / 15%)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "oklch(0.65 0.18 145 / 10%)";
+                }}
+              >
+                <Plus size={15} />
+                <span>Add New Link</span>
+              </button>
+            )}
+
             {isEditMode && (
               <button
                 onClick={() => setShowPasswordManager(true)}
