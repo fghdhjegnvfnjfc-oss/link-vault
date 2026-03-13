@@ -139,3 +139,31 @@
 - [x] Close sidebar when folder is selected on mobile
 - [x] Add overlay behind sidebar on mobile
 - [x] Test on various screen sizes
+
+
+### Phase 6: Inline Link Editing for Admins
+
+- [x] Create EditLinkModal component for inline editing
+- [x] Add edit button to link cards in admin mode
+- [x] Implement title, URL, and description editing
+- [x] Add save and cancel buttons
+- [x] Update link via tRPC mutation
+- [x] Show loading state during save
+- [x] Display success/error messages
+
+## Phase 7: View All Links Section
+
+- [x] Add "All Links" navigation item in sidebar
+- [x] Create AllLinks view component
+- [x] Display all links from all folders in one view
+- [x] Show folder name for each link
+- [x] Implement search/filter for all links
+- [x] Add sorting options (by folder, by title, by clicks)
+- [x] Make it accessible in both regular and admin modes
+
+## Phase 8: Total Website Counter
+
+- [x] Calculate total number of links across all folders
+- [x] Display counter on starting page/password gate
+- [x] Update counter in real-time when links are added/deleted
+- [x] Show counter in sidebar header

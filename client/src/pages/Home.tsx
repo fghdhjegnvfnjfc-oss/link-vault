@@ -4,7 +4,8 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PasswordGate } from "@/components/PasswordGate";
-import { ExternalLink, Lock, Plus, Trash2, Edit2, Save, X, LogOut, Menu } from "lucide-react";
+import { EditLinkModal } from "@/components/EditLinkModal";
+import { ExternalLink, Lock, Plus, Trash2, Edit2, Save, X, LogOut, Menu, Grid3x3, Link as LinkIcon } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 
 interface Folder {
@@ -50,6 +51,13 @@ export default function Home() {
   // Mobile sidebar state
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
+
+  // View state
+  const [viewMode, setViewMode] = useState<"folder" | "all">("folder");
+
+  // Edit link modal state
+  const [editingLink, setEditingLink] = useState<Link | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // Fetch vault data
   const { data: vaultData, isLoading: isLoadingVault } = trpc.vault.getAll.useQuery(
@@ -239,6 +247,20 @@ export default function Home() {
     [selectedFolder, addLinkMutation, isAdmin]
   );
 
+  // Handle edit link
+  const handleEditLink = useCallback(
+    (linkId: number, updates: { title: string; url: string; description: string }) => {
+      if (!isAdmin) return;
+      updateLinkMutation.mutate({
+        linkId,
+        ...updates,
+      });
+      setShowEditModal(false);
+      setEditingLink(null);
+    },
+    [updateLinkMutation, isAdmin]
+  );
+
   // Handle add folder
   const handleAddFolder = useCallback(
     (name: string, icon: string, color: string) => {
@@ -266,12 +288,13 @@ export default function Home() {
 
   // If vault is not unlocked, show password gate
   if (!vaultUnlocked) {
+    const totalLinks = links.length;
     return (
       <div className="min-h-screen bg-background">
         <PasswordGate
           isOpen={showVaultPasswordGate}
           title="Link Vault"
-          description="Enter the vault password to access the shared link directory."
+          description={`Enter the vault password to access the shared link directory. (${totalLinks} links available)`}
           onSuccess={handleVaultPasswordSubmit}
         />
       </div>
@@ -291,9 +314,85 @@ export default function Home() {
 
   const selectedFolderData = folders.find((f) => f.id === selectedFolder);
   const folderLinks = links.filter((l) => l.folderId === selectedFolder);
+  const totalLinks = links.length;
+
+  const renderLinkCard = (link: Link, showFolder: boolean = false) => (
+    <Card
+      key={link.id}
+      className="p-4 hover:shadow-lg transition-shadow cursor-pointer group"
+    >
+      <div className="flex items-start justify-between mb-2">
+        <div className="flex-1 pr-2">
+          <h3 className="font-semibold text-foreground line-clamp-2">
+            {link.title}
+          </h3>
+          {showFolder && (
+            <p className="text-xs text-muted-foreground mt-1">
+              {folders.find((f) => f.id === link.folderId)?.name}
+            </p>
+          )}
+        </div>
+        {editMode && isAdmin && (
+          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+            <button
+              onClick={() => {
+                setEditingLink(link);
+                setShowEditModal(true);
+              }}
+              className="p-1 hover:bg-primary/10 rounded"
+            >
+              <Edit2 className="w-4 h-4 text-primary" />
+            </button>
+            <button
+              onClick={() => deleteLinkMutation.mutate({ linkId: link.id })}
+              className="p-1 hover:bg-destructive/10 rounded"
+            >
+              <Trash2 className="w-4 h-4 text-destructive" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {link.description && (
+        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+          {link.description}
+        </p>
+      )}
+
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => handleLinkClick(link)}
+          className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors text-sm"
+        >
+          <ExternalLink className="w-4 h-4 flex-shrink-0" />
+          <span className="truncate">Open</span>
+        </button>
+        {link.isPasswordProtected && (
+          <Lock className="w-4 h-4 text-yellow-600 flex-shrink-0" />
+        )}
+      </div>
+
+      {link.clickCount > 0 && (
+        <p className="text-xs text-muted-foreground mt-2">
+          Clicked {link.clickCount} time{link.clickCount !== 1 ? "s" : ""}
+        </p>
+      )}
+    </Card>
+  );
 
   return (
     <div className="min-h-screen bg-background">
+      <EditLinkModal
+        isOpen={showEditModal}
+        link={editingLink}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingLink(null);
+        }}
+        onSave={handleEditLink}
+        isSaving={updateLinkMutation.isPending}
+      />
+
       <PasswordGate
         isOpen={showAdminPasswordGate}
         title="Admin Access"
@@ -320,52 +419,100 @@ export default function Home() {
         >
           <div className="mb-6 hidden md:block">
             <h1 className="text-2xl font-bold text-foreground mb-2">Link Vault</h1>
-            <p className="text-sm text-muted-foreground">Shared link directory</p>
+            <p className="text-sm text-muted-foreground">
+              Shared link directory
+            </p>
+            <p className="text-xs text-primary font-semibold mt-2">
+              {totalLinks} link{totalLinks !== 1 ? "s" : ""}
+            </p>
             {isAdmin && (
-              <p className="text-xs text-primary font-semibold mt-2">🔑 Admin Mode</p>
+              <p className="text-xs text-primary font-semibold mt-1">🔑 Admin Mode</p>
             )}
           </div>
 
           {/* Mobile admin indicator */}
           <div className="md:hidden mb-4">
+            <p className="text-xs text-primary font-semibold">
+              {totalLinks} link{totalLinks !== 1 ? "s" : ""}
+            </p>
             {isAdmin && (
               <p className="text-xs text-primary font-semibold">🔑 Admin Mode</p>
             )}
           </div>
 
-          {/* Folders List */}
+          {/* View Mode Selector */}
           <div className="space-y-2 mb-4">
-            {folders.map((folder) => (
-              <button
-                key={folder.id}
-                onClick={() => {
-                  setSelectedFolder(folder.id);
-                  if (window.innerWidth < 768) {
-                    setSidebarOpen(false);
-                  }
-                }}
-                className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                  selectedFolder === folder.id
-                    ? "bg-primary text-primary-foreground"
-                    : "hover:bg-accent text-foreground"
-                }`}
-              >
-                <span className="mr-2">{folder.icon}</span>
-                <span className="truncate">{folder.name}</span>
-              </button>
-            ))}
+            <button
+              onClick={() => {
+                setViewMode("folder");
+                if (window.innerWidth < 768) {
+                  setSidebarOpen(false);
+                }
+              }}
+              className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                viewMode === "folder"
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-accent text-foreground"
+              }`}
+            >
+              <Grid3x3 className="w-4 h-4" />
+              <span>By Folder</span>
+            </button>
+            <button
+              onClick={() => {
+                setViewMode("all");
+                if (window.innerWidth < 768) {
+                  setSidebarOpen(false);
+                }
+              }}
+              className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                viewMode === "all"
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-accent text-foreground"
+              }`}
+            >
+              <LinkIcon className="w-4 h-4" />
+              <span>All Links</span>
+            </button>
           </div>
 
-          {/* Add Folder Button */}
-          {editMode && isAdmin && (
-            <Button
-              onClick={() => handleAddFolder("New Folder", "📁", "oklch(0.65 0.18 200)")}
-              className="w-full mb-4"
-              size="sm"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Folder
-            </Button>
+          {/* Folders List (only show when in folder view) */}
+          {viewMode === "folder" && (
+            <>
+              <div className="space-y-2 mb-4">
+                {folders.map((folder) => (
+                  <button
+                    key={folder.id}
+                    onClick={() => {
+                      setSelectedFolder(folder.id);
+                      if (window.innerWidth < 768) {
+                        setSidebarOpen(false);
+                      }
+                    }}
+                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
+                      selectedFolder === folder.id
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-accent text-foreground"
+                    }`}
+                  >
+                    <span className="mr-2">{folder.icon}</span>
+                    <span className="truncate">{folder.name}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Add Folder Button */}
+              {editMode && isAdmin && (
+                <Button
+                  onClick={() => handleAddFolder("New Folder", "📁", "oklch(0.65 0.18 200)")}
+                  className="w-full mb-4"
+                  size="sm"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Folder
+                </Button>
+              )}
+            </>
           )}
 
           {/* Edit Mode Toggle */}
@@ -395,6 +542,7 @@ export default function Home() {
                 setShowVaultPasswordGate(true);
                 setEditMode(false);
                 setIsAdmin(false);
+                setViewMode("folder");
               }}
               variant="outline"
               className="w-full"
@@ -421,75 +569,78 @@ export default function Home() {
           </div>
 
           <div className="flex-1">
-            {selectedFolderData ? (
-              <div
-                onClick={() => {
-                  if (window.innerWidth < 768) {
-                    setSidebarOpen(false);
-                  }
-                }}
-              >
+            {viewMode === "folder" ? (
+              // Folder View
+              selectedFolderData ? (
+                <div
+                  onClick={() => {
+                    if (window.innerWidth < 768) {
+                      setSidebarOpen(false);
+                    }
+                  }}
+                >
+                  <div className="mb-8">
+                    <h2 className="text-3xl font-bold text-foreground">
+                      {selectedFolderData.icon} {selectedFolderData.name}
+                    </h2>
+                    <p className="text-muted-foreground mt-2">
+                      {folderLinks.length} link{folderLinks.length !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+
+                  {/* Links Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {folderLinks.map((link) => renderLinkCard(link, false))}
+
+                    {/* Add Link Card in Edit Mode */}
+                    {editMode && isAdmin && (
+                      <Card
+                        onClick={() => handleAddLink("New Link", "https://example.com", "")}
+                        className="p-4 border-2 border-dashed border-muted-foreground/50 hover:border-primary/50 transition-colors cursor-pointer flex items-center justify-center min-h-32"
+                      >
+                        <div className="text-center">
+                          <Plus className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                          <p className="text-sm text-muted-foreground">Add Link</p>
+                        </div>
+                      </Card>
+                    )}
+                  </div>
+
+                  {folderLinks.length === 0 && !editMode && (
+                    <div className="text-center py-12">
+                      <p className="text-muted-foreground">No links in this folder yet.</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-muted-foreground">Select a folder to view links.</p>
+                </div>
+              )
+            ) : (
+              // All Links View
+              <div>
                 <div className="mb-8">
-                  <h2 className="text-3xl font-bold text-foreground">
-                    {selectedFolderData.icon} {selectedFolderData.name}
-                  </h2>
+                  <h2 className="text-3xl font-bold text-foreground">All Links</h2>
                   <p className="text-muted-foreground mt-2">
-                    {folderLinks.length} link{folderLinks.length !== 1 ? "s" : ""}
+                    {totalLinks} link{totalLinks !== 1 ? "s" : ""} across {folders.length} folder{folders.length !== 1 ? "s" : ""}
                   </p>
                 </div>
 
-                {/* Links Grid */}
+                {/* All Links Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {folderLinks.map((link) => (
-                    <Card
-                      key={link.id}
-                      className="p-4 hover:shadow-lg transition-shadow cursor-pointer group"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <h3 className="font-semibold text-foreground flex-1 pr-2 line-clamp-2">
-                          {link.title}
-                        </h3>
-                        {editMode && isAdmin && (
-                          <button
-                            onClick={() => deleteLinkMutation.mutate({ linkId: link.id })}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-destructive/10 rounded flex-shrink-0"
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </button>
-                        )}
-                      </div>
-
-                      {link.description && (
-                        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                          {link.description}
-                        </p>
-                      )}
-
-                      <div className="flex items-center justify-between">
-                        <button
-                          onClick={() => handleLinkClick(link)}
-                          className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors text-sm"
-                        >
-                          <ExternalLink className="w-4 h-4 flex-shrink-0" />
-                          <span className="truncate">Open</span>
-                        </button>
-                        {link.isPasswordProtected && (
-                          <Lock className="w-4 h-4 text-yellow-600 flex-shrink-0" />
-                        )}
-                      </div>
-
-                      {link.clickCount > 0 && (
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Clicked {link.clickCount} time{link.clickCount !== 1 ? "s" : ""}
-                        </p>
-                      )}
-                    </Card>
-                  ))}
+                  {links.map((link) => renderLinkCard(link, true))}
 
                   {/* Add Link Card in Edit Mode */}
                   {editMode && isAdmin && (
                     <Card
-                      onClick={() => handleAddLink("New Link", "https://example.com", "")}
+                      onClick={() => {
+                        if (selectedFolder) {
+                          handleAddLink("New Link", "https://example.com", "");
+                        } else {
+                          alert("Please select a folder first");
+                        }
+                      }}
                       className="p-4 border-2 border-dashed border-muted-foreground/50 hover:border-primary/50 transition-colors cursor-pointer flex items-center justify-center min-h-32"
                     >
                       <div className="text-center">
@@ -500,15 +651,11 @@ export default function Home() {
                   )}
                 </div>
 
-                {folderLinks.length === 0 && !editMode && (
+                {totalLinks === 0 && (
                   <div className="text-center py-12">
-                    <p className="text-muted-foreground">No links in this folder yet.</p>
+                    <p className="text-muted-foreground">No links available yet.</p>
                   </div>
                 )}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">Select a folder to view links.</p>
               </div>
             )}
           </div>
