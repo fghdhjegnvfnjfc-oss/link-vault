@@ -129,3 +129,13 @@
 - [x] Show admin status indicator in UI
 - [x] Add visual feedback for password entry
 - [x] Show error messages for incorrect passwords
+
+
+## Phase 5: Mobile-Friendly Collapsible Sidebar
+
+- [x] Add hamburger menu button for mobile
+- [x] Implement sidebar toggle state
+- [x] Add mobile-responsive layout
+- [x] Close sidebar when folder is selected on mobile
+- [x] Add overlay behind sidebar on mobile
+- [x] Test on various screen sizes
