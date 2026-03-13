@@ -1,0 +1,9 @@
+{
+  "query": "SHOW TABLES LIKE 'folders';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3AWx11XxytSJCwL.root --database MTnGojgUB5HzdQARgKvcKo --execute SHOW TABLES LIKE 'folders';",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 59
+}

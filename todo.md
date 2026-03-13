@@ -95,3 +95,12 @@
 - [ ] Test reordering persists across sessions
 - [ ] Fix database schema conflicts and seed data
 - [ ] Write vitest tests for vault procedures
+
+
+## Bug Fixes
+
+- [x] Fix "Failed to add folder" error - vault procedures require authentication but user is null
+- [x] Make vault procedures public or handle unauthenticated access
+- [x] Add password-protected access gate before vault operations
+- [x] Fixed database schema conflicts with vaultId fields
+- [x] Created proper migration files and seeded test data

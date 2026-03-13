@@ -1,0 +1,34 @@
+{
+  "query": "SHOW TABLES;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3AWx11XxytSJCwL.root --database MTnGojgUB5HzdQARgKvcKo --execute SHOW TABLES;",
+  "rows": [
+    {
+      "Tables_in_MTnGojgUB5HzdQARgKvcKo": "__drizzle_migrations"
+    },
+    {
+      "Tables_in_MTnGojgUB5HzdQARgKvcKo": "activeSessions"
+    },
+    {
+      "Tables_in_MTnGojgUB5HzdQARgKvcKo": "auditLog"
+    },
+    {
+      "Tables_in_MTnGojgUB5HzdQARgKvcKo": "bannedUsers"
+    },
+    {
+      "Tables_in_MTnGojgUB5HzdQARgKvcKo": "editState"
+    },
+    {
+      "Tables_in_MTnGojgUB5HzdQARgKvcKo": "users"
+    },
+    {
+      "Tables_in_MTnGojgUB5HzdQARgKvcKo": "vaultMembers"
+    },
+    {
+      "Tables_in_MTnGojgUB5HzdQARgKvcKo": "vaults"
+    }
+  ],
+  "messages": [],
+  "stdout": "Tables_in_MTnGojgUB5HzdQARgKvcKo\n__drizzle_migrations\nactiveSessions\nauditLog\nbannedUsers\neditState\nusers\nvaultMembers\nvaults\n",
+  "stderr": "",
+  "execution_time_ms": 62
+}
