@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PasswordGate } from "@/components/PasswordGate";
 import { EditLinkModal } from "@/components/EditLinkModal";
+import { AddLinkModal } from "@/components/AddLinkModal";
 import { ExternalLink, Lock, Plus, Trash2, Edit2, Save, X, LogOut, Menu, Grid3x3, Link as LinkIcon } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 
@@ -58,6 +59,9 @@ export default function Home() {
   // Edit link modal state
   const [editingLink, setEditingLink] = useState<Link | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+
+  // Add link modal state
+  const [showAddLinkModal, setShowAddLinkModal] = useState(false);
 
   // Fetch vault data
   const { data: vaultData, isLoading: isLoadingVault } = trpc.vault.getAll.useQuery(
@@ -401,6 +405,13 @@ export default function Home() {
         onClose={() => setShowAdminPasswordGate(false)}
       />
 
+      <AddLinkModal
+        isOpen={showAddLinkModal}
+        onClose={() => setShowAddLinkModal(false)}
+        onSave={handleAddLink}
+        isLoading={addLinkMutation.isPending}
+      />
+
       <div className="flex h-screen">
         {/* Mobile overlay */}
         {sidebarOpen && (
@@ -595,7 +606,7 @@ export default function Home() {
                     {/* Add Link Card in Edit Mode */}
                     {editMode && isAdmin && (
                       <Card
-                        onClick={() => handleAddLink("New Link", "https://example.com", "")}
+                        onClick={() => setShowAddLinkModal(true)}
                         className="p-4 border-2 border-dashed border-muted-foreground/50 hover:border-primary/50 transition-colors cursor-pointer flex items-center justify-center min-h-32"
                       >
                         <div className="text-center">
@@ -634,13 +645,7 @@ export default function Home() {
                   {/* Add Link Card in Edit Mode */}
                   {editMode && isAdmin && (
                     <Card
-                      onClick={() => {
-                        if (selectedFolder) {
-                          handleAddLink("New Link", "https://example.com", "");
-                        } else {
-                          alert("Please select a folder first");
-                        }
-                      }}
+                      onClick={() => setShowAddLinkModal(true)}
                       className="p-4 border-2 border-dashed border-muted-foreground/50 hover:border-primary/50 transition-colors cursor-pointer flex items-center justify-center min-h-32"
                     >
                       <div className="text-center">
@@ -661,6 +666,27 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      <EditLinkModal
+        isOpen={showEditModal}
+        link={editingLink}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingLink(null);
+        }}
+        onSave={(linkId, updates) => {
+          handleEditLink(linkId, updates);
+        }}
+      />
+
+      <AddLinkModal
+        isOpen={showAddLinkModal}
+        onClose={() => setShowAddLinkModal(false)}
+        onSave={(title, url, description) => {
+          handleAddLink(title, url, description);
+        }}
+      />
     </div>
   );
 }

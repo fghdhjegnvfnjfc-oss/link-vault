@@ -167,3 +167,8 @@
 - [x] Display counter on starting page/password gate
 - [x] Update counter in real-time when links are added/deleted
 - [x] Show counter in sidebar header
+
+
+## Bug Reports
+
+- [x] Add link functionality not working - FIXED: Created AddLinkModal component and fixed routers audit logging

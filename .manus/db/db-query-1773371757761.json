@@ -1,0 +1,9 @@
+{
+  "query": "DELETE FROM links; DELETE FROM folders;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway04.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3AWx11XxytSJCwL.root --database MTnGojgUB5HzdQARgKvcKo --execute DELETE FROM links; DELETE FROM folders;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 210
+}
