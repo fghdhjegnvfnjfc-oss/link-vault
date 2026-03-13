@@ -1,7 +1,9 @@
-import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
+const COOKIE_NAME = "session";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
+import { z } from "zod";
+import * as db from "./db";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -17,12 +19,61 @@ export const appRouter = router({
     }),
   }),
 
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  vault: router({
+    getAll: publicProcedure.query(async () => {
+      const vaultData = await db.getVaultData(1); // Using vault ID 1 for single shared vault
+      return vaultData;
+    }),
+    addLink: publicProcedure
+      .input(z.object({
+        folderId: z.number(),
+        title: z.string(),
+        url: z.string(),
+        description: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        return await db.addLink(1, input.folderId, input.title, input.url, input.description || "");
+      }),
+    updateLink: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        title: z.string(),
+        url: z.string(),
+        description: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        return await db.updateLink(input.id, input.title, input.url, input.description || "");
+      }),
+    deleteLink: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await db.deleteLink(input.id);
+      }),
+    addFolder: publicProcedure
+      .input(z.object({
+        name: z.string(),
+        icon: z.string(),
+        color: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        return await db.addFolder(1, input.name, input.icon, input.color);
+      }),
+    updateFolder: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string(),
+        icon: z.string(),
+        color: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        return await db.updateFolder(input.id, input.name, input.icon, input.color);
+      }),
+    deleteFolder: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        return await db.deleteFolder(input.id);
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

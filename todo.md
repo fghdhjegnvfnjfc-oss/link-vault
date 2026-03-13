@@ -43,3 +43,10 @@
 - [ ] Phase 3: Conflict resolution (handle simultaneous edits)
 - [ ] Phase 4: Offline support (queue changes, sync when reconnected)
 - [ ] Phase 5: Advanced features (undo/redo, version history, comments)
+
+
+## Current Issue
+
+- [ ] Single shared vault not working - Home.tsx is using localStorage instead of database
+- [ ] Need to update Home.tsx to use tRPC procedures and WebSocket for real-time sync
+- [ ] Each user currently has their own vault stored in localStorage instead of sharing one database vault
