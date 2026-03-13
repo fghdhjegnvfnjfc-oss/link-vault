@@ -1,8 +1,8 @@
 import { Server as HTTPServer } from "http";
 import { Server as SocketIOServer, Socket } from "socket.io";
 import { getDb } from "./db";
-import { users } from "../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { activeSessions, editState, users } from "../drizzle/schema";
+import { eq, and } from "drizzle-orm";
 
 // Color palette for user avatars
 const USER_COLORS = [
@@ -39,15 +39,14 @@ interface EditingUser {
 }
 
 interface VaultPresence {
-  onlineUsers: UserPresence[];
-  editingUsers: EditingUser[];
+  [vaultId: number]: {
+    onlineUsers: UserPresence[];
+    editingUsers: EditingUser[];
+  };
 }
 
-// In-memory store for active presence (single vault)
-const vaultPresence: VaultPresence = {
-  onlineUsers: [],
-  editingUsers: [],
-};
+// In-memory store for active presence (will be synced with DB)
+const vaultPresence: VaultPresence = {};
 
 export function setupWebSocket(httpServer: HTTPServer) {
   const io = new SocketIOServer(httpServer, {
@@ -63,14 +62,16 @@ export function setupWebSocket(httpServer: HTTPServer) {
   io.use(async (socket, next) => {
     try {
       const userId = socket.handshake.auth.userId;
+      const vaultId = socket.handshake.auth.vaultId;
       const sessionId = socket.id;
 
-      if (!userId) {
-        return next(new Error("Missing userId"));
+      if (!userId || !vaultId) {
+        return next(new Error("Missing userId or vaultId"));
       }
 
       // Store metadata on socket
       socket.data.userId = userId;
+      socket.data.vaultId = vaultId;
       socket.data.sessionId = sessionId;
 
       next();
@@ -81,9 +82,10 @@ export function setupWebSocket(httpServer: HTTPServer) {
 
   io.on("connection", async (socket: Socket) => {
     const userId = socket.data.userId as number;
+    const vaultId = socket.data.vaultId as number;
     const sessionId = socket.data.sessionId as string;
 
-    console.log(`[WebSocket] User ${userId} connected`);
+    console.log(`[WebSocket] User ${userId} connected to vault ${vaultId}`);
 
     try {
       const db = await getDb();
@@ -113,6 +115,14 @@ export function setupWebSocket(httpServer: HTTPServer) {
       // Assign user color
       const userColor = USER_COLORS[userId % USER_COLORS.length];
 
+      // Initialize vault presence if needed
+      if (!vaultPresence[vaultId]) {
+        vaultPresence[vaultId] = {
+          onlineUsers: [],
+          editingUsers: [],
+        };
+      }
+
       // Add user to online list
       const userPresence: UserPresence = {
         userId,
@@ -123,10 +133,25 @@ export function setupWebSocket(httpServer: HTTPServer) {
         isOnline: true,
       };
 
-      vaultPresence.onlineUsers.push(userPresence);
+      vaultPresence[vaultId].onlineUsers.push(userPresence);
 
-      // Notify all users about new presence
-      io.emit("user:joined", {
+      // Save session to database (optional)
+      if (db) {
+        try {
+          await db.insert(activeSessions).values({
+            vaultId,
+            userId,
+            sessionId,
+            userColor,
+            isOnline: true,
+          });
+        } catch (error) {
+          console.warn("[WebSocket] Could not save session to DB:", error);
+        }
+      }
+
+      // Notify all users in vault about new presence
+      io.to(`vault:${vaultId}`).emit("user:joined", {
         userId,
         sessionId,
         userName,
@@ -135,9 +160,12 @@ export function setupWebSocket(httpServer: HTTPServer) {
 
       // Send current presence state to newly connected user
       io.to(socket.id).emit("presence:sync", {
-        onlineUsers: vaultPresence.onlineUsers,
-        editingUsers: vaultPresence.editingUsers,
+        onlineUsers: vaultPresence[vaultId].onlineUsers,
+        editingUsers: vaultPresence[vaultId].editingUsers,
       });
+
+      // Join socket to vault room
+      socket.join(`vault:${vaultId}`);
 
       // ─── Edit State Events ───────────────────────────────────────
 
@@ -150,7 +178,7 @@ export function setupWebSocket(httpServer: HTTPServer) {
 
         try {
           // Check if someone else is already editing this
-          const existingEdit = vaultPresence.editingUsers.find(
+          const existingEdit = vaultPresence[vaultId].editingUsers.find(
             (e) =>
               e.resourceType === resourceType &&
               e.resourceId === resourceId &&
@@ -182,10 +210,26 @@ export function setupWebSocket(httpServer: HTTPServer) {
             fieldName,
           };
 
-          vaultPresence.editingUsers.push(editingUser);
+          vaultPresence[vaultId].editingUsers.push(editingUser);
 
-          // Broadcast to all users
-          io.emit("edit:started", {
+          // Save to database (optional)
+          if (db) {
+            try {
+              await db.insert(editState).values({
+                vaultId,
+                sessionId,
+                userId,
+                resourceType,
+                resourceId,
+                fieldName,
+              });
+            } catch (error) {
+              console.warn("[WebSocket] Could not save edit state to DB:", error);
+            }
+          }
+
+          // Broadcast to all users in vault
+          io.to(`vault:${vaultId}`).emit("edit:started", {
             userId,
             sessionId,
             userName,
@@ -209,7 +253,7 @@ export function setupWebSocket(httpServer: HTTPServer) {
         const { resourceType, resourceId, fieldName, value } = data;
 
         // Update in-memory state
-        const editingUser = vaultPresence.editingUsers.find(
+        const editingUser = vaultPresence[vaultId].editingUsers.find(
           (e) =>
             e.userId === userId &&
             e.resourceType === resourceType &&
@@ -221,8 +265,8 @@ export function setupWebSocket(httpServer: HTTPServer) {
           editingUser.currentValue = value;
         }
 
-        // Broadcast field change to all users
-        io.emit("edit:field-update", {
+        // Broadcast field change to all users in vault
+        io.to(`vault:${vaultId}`).emit("edit:field-update", {
           userId,
           sessionId,
           resourceType,
@@ -241,7 +285,7 @@ export function setupWebSocket(httpServer: HTTPServer) {
 
         try {
           // Remove from editing users
-          vaultPresence.editingUsers = vaultPresence.editingUsers.filter(
+          vaultPresence[vaultId].editingUsers = vaultPresence[vaultId].editingUsers.filter(
             (e) =>
               !(
                 e.userId === userId &&
@@ -251,8 +295,25 @@ export function setupWebSocket(httpServer: HTTPServer) {
               )
           );
 
+          // Remove from database (optional)
+          if (db) {
+            try {
+              await db
+                .delete(editState)
+                .where(
+                  and(
+                    eq(editState.sessionId, sessionId),
+                    eq(editState.resourceType, resourceType),
+                    eq(editState.resourceId, resourceId)
+                  )
+                );
+            } catch (error) {
+              console.warn("[WebSocket] Could not delete edit state from DB:", error);
+            }
+          }
+
           // Broadcast to all users
-          io.emit("edit:ended", {
+          io.to(`vault:${vaultId}`).emit("edit:ended", {
             userId,
             sessionId,
             resourceType,
@@ -264,108 +325,65 @@ export function setupWebSocket(httpServer: HTTPServer) {
         }
       });
 
-      // ─── Flash Identification ──────────────────────────────────────
-
-      socket.on("flash:identify", async (data: { targetSessionId: string }) => {
-        try {
-          // Send white screen flash to target user
-          io.to(data.targetSessionId).emit("flash:trigger", {
-            flashColor: "white",
-            duration: 500,
-          });
-          console.log(`[WebSocket] Flash sent to session ${data.targetSessionId}`);
-        } catch (error) {
-          console.error("[WebSocket] Error sending flash:", error);
-          socket.emit("error", { message: "Failed to send flash" });
-        }
-      });
-
-      // ─── Kick User ──────────────────────────────────────────────────
-
-      socket.on("user:kick", async (data: { targetSessionId: string }) => {
-        try {
-          // Disconnect the target user
-          io.to(data.targetSessionId).emit("user:kicked", {
-            reason: "You have been kicked from the vault",
-          });
-          
-          // Force disconnect after a short delay
-          setTimeout(() => {
-            const targetSocket = io.sockets.sockets.get(data.targetSessionId);
-            if (targetSocket) {
-              targetSocket.disconnect(true);
-            }
-          }, 100);
-
-          console.log(`[WebSocket] User kicked from session ${data.targetSessionId}`);
-          socket.emit("kick:success", { targetSessionId: data.targetSessionId });
-        } catch (error) {
-          console.error("[WebSocket] Error kicking user:", error);
-          socket.emit("error", { message: "Failed to kick user" });
-        }
-      });
-
-      //      // ─── Vault Data Sync Events ──────────────────────────────────
-
-      socket.on("vault:link-added", (data: { link: any }) => {
-        io.emit("vault:link-added", data);
-      });
-
-      socket.on("vault:link-updated", (data: { linkId: number; updates: any }) => {
-        io.emit("vault:link-updated", data);
-      });
-
-      socket.on("vault:link-deleted", (data: { linkId: number }) => {
-        io.emit("vault:link-deleted", data);
-      });
-
-      socket.on("vault:folder-added", (data: { folder: any }) => {
-        io.emit("vault:folder-added", data);
-      });
-
-      socket.on("vault:folder-updated", (data: { folderId: number; updates: any }) => {
-        io.emit("vault:folder-updated", data);
-      });
-
-      socket.on("vault:folder-deleted", (data: { folderId: number }) => {
-        io.emit("vault:folder-deleted", data);
-      });
-
-      socket.on("vault:reorder-links", (data: { linkIds: number[] }) => {
-        io.emit("vault:reorder-links", data);
-      });
-
-      socket.on("vault:reorder-folders", (data: { folderIds: number[] }) => {
-        io.emit("vault:reorder-folders", data);
-      });
-
-      // ─── Heartbeat ────────────────────────────────────
+      // ─── Heartbeat ───────────────────────────────────────────────
 
       socket.on("heartbeat", async () => {
-        socket.emit("heartbeat:ack");
+        if (!db) return;
+        
+        try {
+          await db
+            .update(activeSessions)
+            .set({ lastHeartbeat: new Date() })
+            .where(eq(activeSessions.sessionId, sessionId));
+        } catch (error) {
+          console.warn("[WebSocket] Error updating heartbeat:", error);
+        }
       });
 
       // ─── Disconnect ──────────────────────────────────────────────
 
       socket.on("disconnect", async () => {
-        console.log(`[WebSocket] User ${userId} disconnected`);
+        console.log(`[WebSocket] User ${userId} disconnected from vault ${vaultId}`);
 
         try {
           // Remove from online users
-          vaultPresence.onlineUsers = vaultPresence.onlineUsers.filter(
+          vaultPresence[vaultId].onlineUsers = vaultPresence[vaultId].onlineUsers.filter(
             (u) => u.sessionId !== sessionId
           );
 
           // Remove from editing users
-          vaultPresence.editingUsers = vaultPresence.editingUsers.filter(
+          vaultPresence[vaultId].editingUsers = vaultPresence[vaultId].editingUsers.filter(
             (e) => e.sessionId !== sessionId
           );
 
+          // Remove from database (optional)
+          if (db) {
+            try {
+              await db
+                .delete(activeSessions)
+                .where(eq(activeSessions.sessionId, sessionId));
+
+              await db
+                .delete(editState)
+                .where(eq(editState.sessionId, sessionId));
+            } catch (error) {
+              console.warn("[WebSocket] Could not delete sessions from DB:", error);
+            }
+          }
+
           // Notify others
-          io.emit("user:left", {
+          io.to(`vault:${vaultId}`).emit("user:left", {
             userId,
             sessionId,
           });
+
+          // Clean up empty vault presence
+          if (
+            vaultPresence[vaultId].onlineUsers.length === 0 &&
+            vaultPresence[vaultId].editingUsers.length === 0
+          ) {
+            delete vaultPresence[vaultId];
+          }
         } catch (error) {
           console.error("[WebSocket] Error handling disconnect:", error);
         }
@@ -379,6 +397,6 @@ export function setupWebSocket(httpServer: HTTPServer) {
   return io;
 }
 
-export function getVaultPresence() {
-  return vaultPresence;
+export function getVaultPresence(vaultId: number) {
+  return vaultPresence[vaultId] || { onlineUsers: [], editingUsers: [] };
 }
