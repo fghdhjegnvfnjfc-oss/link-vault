@@ -3,7 +3,8 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ExternalLink, Lock, Plus, Trash2, Edit2, Save, X } from "lucide-react";
+import { PasswordGate } from "@/components/PasswordGate";
+import { ExternalLink, Lock, Plus, Trash2, Edit2, Save, X, LogOut } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 
 interface Folder {
@@ -26,21 +27,35 @@ interface Link {
   clickCount: number;
 }
 
+const VAULT_PASSWORD = "vault2024";
+const ADMIN_PASSWORD = "admin2024";
+
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [folders, setFolders] = useState<Folder[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<number | null>(null);
-  const [editMode, setEditMode] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // Password protection states
+  const [vaultUnlocked, setVaultUnlocked] = useState(false);
+  const [showVaultPasswordGate, setShowVaultPasswordGate] = useState(true);
+  const [editMode, setEditMode] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdminPasswordGate, setShowAdminPasswordGate] = useState(false);
+  const [vaultPasswordError, setVaultPasswordError] = useState("");
+  const [adminPasswordError, setAdminPasswordError] = useState("");
+
   // Fetch vault data
-  const { data: vaultData, isLoading: isLoadingVault } = trpc.vault.getAll.useQuery();
+  const { data: vaultData, isLoading: isLoadingVault } = trpc.vault.getAll.useQuery(
+    undefined,
+    { enabled: vaultUnlocked }
+  );
 
   // Initialize vault data
   useEffect(() => {
-    if (vaultData) {
+    if (vaultData && vaultUnlocked) {
       setFolders(vaultData.folders as Folder[]);
       setLinks(vaultData.links as Link[]);
       if (vaultData.folders.length > 0) {
@@ -48,11 +63,11 @@ export default function Home() {
       }
       setLoading(false);
     }
-  }, [vaultData]);
+  }, [vaultData, vaultUnlocked]);
 
   // Setup WebSocket connection for real-time updates
   useEffect(() => {
-    if (!isAuthenticated || !user) return;
+    if (!isAuthenticated || !user || !vaultUnlocked) return;
 
     const newSocket = io(window.location.origin, {
       auth: {
@@ -117,7 +132,7 @@ export default function Home() {
     return () => {
       newSocket.disconnect();
     };
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, vaultUnlocked]);
 
   // Mutations
   const addLinkMutation = trpc.vault.addLink.useMutation({
@@ -164,6 +179,41 @@ export default function Home() {
 
   const recordClickMutation = trpc.vault.recordClick.useMutation();
 
+  // Handle vault password submission
+  const handleVaultPasswordSubmit = (password: string) => {
+    if (password === VAULT_PASSWORD) {
+      setVaultUnlocked(true);
+      setShowVaultPasswordGate(false);
+      setVaultPasswordError("");
+    } else {
+      setVaultPasswordError("Incorrect password. Please try again.");
+    }
+  };
+
+  // Handle admin password submission
+  const handleAdminPasswordSubmit = (password: string) => {
+    if (password === ADMIN_PASSWORD) {
+      setIsAdmin(true);
+      setEditMode(true);
+      setShowAdminPasswordGate(false);
+      setAdminPasswordError("");
+    } else {
+      setAdminPasswordError("Incorrect admin password. Please try again.");
+    }
+  };
+
+  // Handle edit mode toggle
+  const handleEditModeToggle = () => {
+    if (editMode) {
+      // Disable edit mode
+      setEditMode(false);
+      setIsAdmin(false);
+    } else {
+      // Show admin password gate
+      setShowAdminPasswordGate(true);
+    }
+  };
+
   // Handle link click
   const handleLinkClick = useCallback(
     (link: Link) => {
@@ -176,7 +226,7 @@ export default function Home() {
   // Handle add link
   const handleAddLink = useCallback(
     (title: string, url: string, description: string) => {
-      if (selectedFolder === null) return;
+      if (selectedFolder === null || !isAdmin) return;
       addLinkMutation.mutate({
         folderId: selectedFolder,
         title,
@@ -184,16 +234,31 @@ export default function Home() {
         description,
       });
     },
-    [selectedFolder, addLinkMutation]
+    [selectedFolder, addLinkMutation, isAdmin]
   );
 
   // Handle add folder
   const handleAddFolder = useCallback(
     (name: string, icon: string, color: string) => {
+      if (!isAdmin) return;
       addFolderMutation.mutate({ name, icon, color });
     },
-    [addFolderMutation]
+    [addFolderMutation, isAdmin]
   );
+
+  // If vault is not unlocked, show password gate
+  if (!vaultUnlocked) {
+    return (
+      <div className="min-h-screen bg-background">
+        <PasswordGate
+          isOpen={showVaultPasswordGate}
+          title="Link Vault"
+          description="Enter the vault password to access the shared link directory."
+          onSuccess={handleVaultPasswordSubmit}
+        />
+      </div>
+    );
+  }
 
   if (loading || isLoadingVault) {
     return (
@@ -211,12 +276,23 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background">
+      <PasswordGate
+        isOpen={showAdminPasswordGate}
+        title="Admin Access"
+        description="Enter the admin password to enable editing."
+        onSuccess={handleAdminPasswordSubmit}
+        onClose={() => setShowAdminPasswordGate(false)}
+      />
+
       <div className="flex h-screen">
         {/* Sidebar */}
         <div className="w-64 bg-card border-r border-border p-4 overflow-y-auto">
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-foreground mb-2">Link Vault</h1>
             <p className="text-sm text-muted-foreground">Shared link directory</p>
+            {isAdmin && (
+              <p className="text-xs text-primary font-semibold mt-2">🔑 Admin Mode</p>
+            )}
           </div>
 
           {/* Folders List */}
@@ -238,7 +314,7 @@ export default function Home() {
           </div>
 
           {/* Add Folder Button */}
-          {editMode && (
+          {editMode && isAdmin && (
             <Button
               onClick={() => handleAddFolder("New Folder", "📁", "oklch(0.65 0.18 200)")}
               className="w-full mt-4"
@@ -250,15 +326,39 @@ export default function Home() {
           )}
 
           {/* Edit Mode Toggle */}
-          <div className="mt-6 pt-6 border-t border-border">
+          <div className="mt-6 pt-6 border-t border-border space-y-2">
             <Button
-              onClick={() => setEditMode(!editMode)}
+              onClick={handleEditModeToggle}
               variant={editMode ? "default" : "outline"}
               className="w-full"
               size="sm"
             >
-              {editMode ? <Save className="w-4 h-4 mr-2" /> : <Edit2 className="w-4 h-4 mr-2" />}
-              {editMode ? "Done Editing" : "Edit Mode"}
+              {editMode ? (
+                <>
+                  <Save className="w-4 h-4 mr-2" />
+                  Done Editing
+                </>
+              ) : (
+                <>
+                  <Edit2 className="w-4 h-4 mr-2" />
+                  Edit Mode
+                </>
+              )}
+            </Button>
+
+            <Button
+              onClick={() => {
+                setVaultUnlocked(false);
+                setShowVaultPasswordGate(true);
+                setEditMode(false);
+                setIsAdmin(false);
+              }}
+              variant="outline"
+              className="w-full"
+              size="sm"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Exit Vault
             </Button>
           </div>
         </div>
@@ -285,7 +385,7 @@ export default function Home() {
                   >
                     <div className="flex items-start justify-between mb-2">
                       <h3 className="font-semibold text-foreground flex-1 pr-2">{link.title}</h3>
-                      {editMode && (
+                      {editMode && isAdmin && (
                         <button
                           onClick={() => deleteLinkMutation.mutate({ linkId: link.id })}
                           className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-destructive/10 rounded"
@@ -307,7 +407,9 @@ export default function Home() {
                         <ExternalLink className="w-4 h-4" />
                         Open Link
                       </button>
-                      {link.isPasswordProtected && <Lock className="w-4 h-4 text-yellow-600" />}
+                      {link.isPasswordProtected && (
+                        <Lock className="w-4 h-4 text-yellow-600" />
+                      )}
                     </div>
 
                     {link.clickCount > 0 && (
@@ -319,7 +421,7 @@ export default function Home() {
                 ))}
 
                 {/* Add Link Card in Edit Mode */}
-                {editMode && (
+                {editMode && isAdmin && (
                   <Card
                     onClick={() => handleAddLink("New Link", "https://example.com", "")}
                     className="p-4 border-2 border-dashed border-muted-foreground/50 hover:border-primary/50 transition-colors cursor-pointer flex items-center justify-center min-h-32"
