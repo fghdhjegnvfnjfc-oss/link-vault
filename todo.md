@@ -172,3 +172,30 @@
 ## Bug Reports
 
 - [x] Add link functionality not working - FIXED: Created AddLinkModal component and fixed routers audit logging
+
+
+## Phase 9: Folder & Link Management
+
+### Folder Management
+- [x] Create EditFolderModal component for editing folder name and icon
+- [x] Add edit button to folder items in sidebar (admin mode)
+- [x] Implement folder rename functionality
+- [x] Create DeleteFolderModal with confirmation dialog
+- [x] Add delete button to folders (admin mode)
+- [x] Prevent deletion of folders with links (or move links first)
+- [x] Show success/error messages for folder operations
+
+### Link Management
+- [x] Add delete button to link cards (admin mode)
+- [x] Create DeleteLinkModal with confirmation dialog
+- [x] Implement link deletion with confirmation
+- [x] Show success/error messages for link deletion
+- [x] Update link counter when links are deleted
+- [x] Add undo functionality (optional)
+
+### UI/UX Improvements
+- [x] Add hover effects to show edit/delete buttons
+- [x] Improve modal styling for consistency
+- [x] Add loading states during operations
+- [x] Show toast notifications for success/error
+- [x] Add keyboard shortcuts for common actions (optional)

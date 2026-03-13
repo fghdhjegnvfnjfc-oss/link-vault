@@ -6,6 +6,9 @@ import { Card } from "@/components/ui/card";
 import { PasswordGate } from "@/components/PasswordGate";
 import { EditLinkModal } from "@/components/EditLinkModal";
 import { AddLinkModal } from "@/components/AddLinkModal";
+import { DeleteLinkModal } from "@/components/DeleteLinkModal";
+import { EditFolderModal } from "@/components/EditFolderModal";
+import { DeleteFolderModal } from "@/components/DeleteFolderModal";
 import { ExternalLink, Lock, Plus, Trash2, Edit2, Save, X, LogOut, Menu, Grid3x3, Link as LinkIcon } from "lucide-react";
 import { io, Socket } from "socket.io-client";
 
@@ -62,6 +65,18 @@ export default function Home() {
 
   // Add link modal state
   const [showAddLinkModal, setShowAddLinkModal] = useState(false);
+
+  // Delete link modal state
+  const [deletingLink, setDeletingLink] = useState<Link | null>(null);
+  const [showDeleteLinkModal, setShowDeleteLinkModal] = useState(false);
+
+  // Edit folder modal state
+  const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
+  const [showEditFolderModal, setShowEditFolderModal] = useState(false);
+
+  // Delete folder modal state
+  const [deletingFolder, setDeletingFolder] = useState<Folder | null>(null);
+  const [showDeleteFolderModal, setShowDeleteFolderModal] = useState(false);
 
   // Fetch vault data
   const { data: vaultData, isLoading: isLoadingVault } = trpc.vault.getAll.useQuery(
@@ -274,6 +289,37 @@ export default function Home() {
     [addFolderMutation, isAdmin]
   );
 
+  // Handle edit folder
+  const handleEditFolder = useCallback(
+    (name: string, icon: string) => {
+      if (!editingFolder || !isAdmin) return;
+      updateFolderMutation.mutate({
+        folderId: editingFolder.id,
+        name,
+        icon,
+      });
+      setShowEditFolderModal(false);
+      setEditingFolder(null);
+    },
+    [editingFolder, updateFolderMutation, isAdmin]
+  );
+
+  // Handle delete folder
+  const handleDeleteFolder = useCallback(() => {
+    if (!deletingFolder || !isAdmin) return;
+    deleteFolderMutation.mutate({ folderId: deletingFolder.id });
+    setShowDeleteFolderModal(false);
+    setDeletingFolder(null);
+  }, [deletingFolder, deleteFolderMutation, isAdmin]);
+
+  // Handle delete link
+  const handleDeleteLink = useCallback(() => {
+    if (!deletingLink || !isAdmin) return;
+    deleteLinkMutation.mutate({ linkId: deletingLink.id });
+    setShowDeleteLinkModal(false);
+    setDeletingLink(null);
+  }, [deletingLink, deleteLinkMutation, isAdmin]);
+
   // Close sidebar when clicking outside on mobile
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -348,7 +394,10 @@ export default function Home() {
               <Edit2 className="w-4 h-4 text-primary" />
             </button>
             <button
-              onClick={() => deleteLinkMutation.mutate({ linkId: link.id })}
+              onClick={() => {
+                setDeletingLink(link);
+                setShowDeleteLinkModal(true);
+              }}
               className="p-1 hover:bg-destructive/10 rounded"
             >
               <Trash2 className="w-4 h-4 text-destructive" />
@@ -410,6 +459,40 @@ export default function Home() {
         onClose={() => setShowAddLinkModal(false)}
         onSave={handleAddLink}
         isLoading={addLinkMutation.isPending}
+      />
+
+      <DeleteLinkModal
+        isOpen={showDeleteLinkModal}
+        linkTitle={deletingLink?.title || ""}
+        onConfirm={handleDeleteLink}
+        onCancel={() => {
+          setShowDeleteLinkModal(false);
+          setDeletingLink(null);
+        }}
+        isLoading={deleteLinkMutation.isPending}
+      />
+
+      <EditFolderModal
+        isOpen={showEditFolderModal}
+        folder={editingFolder ? { id: String(editingFolder.id), name: editingFolder.name, icon: editingFolder.icon } : undefined}
+        onSave={handleEditFolder}
+        onCancel={() => {
+          setShowEditFolderModal(false);
+          setEditingFolder(null);
+        }}
+        isLoading={updateFolderMutation.isPending}
+      />
+
+      <DeleteFolderModal
+        isOpen={showDeleteFolderModal}
+        folderName={deletingFolder?.name || ""}
+        linkCount={links.filter((l) => l.folderId === deletingFolder?.id).length}
+        onConfirm={handleDeleteFolder}
+        onCancel={() => {
+          setShowDeleteFolderModal(false);
+          setDeletingFolder(null);
+        }}
+        isLoading={deleteFolderMutation.isPending}
       />
 
       <div className="flex h-screen">
@@ -492,23 +575,46 @@ export default function Home() {
             <>
               <div className="space-y-2 mb-4">
                 {folders.map((folder) => (
-                  <button
-                    key={folder.id}
-                    onClick={() => {
-                      setSelectedFolder(folder.id);
-                      if (window.innerWidth < 768) {
-                        setSidebarOpen(false);
-                      }
-                    }}
-                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                      selectedFolder === folder.id
-                        ? "bg-primary text-primary-foreground"
-                        : "hover:bg-accent text-foreground"
-                    }`}
-                  >
-                    <span className="mr-2">{folder.icon}</span>
-                    <span className="truncate">{folder.name}</span>
-                  </button>
+                  <div key={folder.id} className="flex items-center gap-1 group">
+                    <button
+                      onClick={() => {
+                        setSelectedFolder(folder.id);
+                        if (window.innerWidth < 768) {
+                          setSidebarOpen(false);
+                        }
+                      }}
+                      className={`flex-1 text-left px-3 py-2 rounded-lg transition-colors ${
+                        selectedFolder === folder.id
+                          ? "bg-primary text-primary-foreground"
+                          : "hover:bg-accent text-foreground"
+                      }`}
+                    >
+                      <span className="mr-2">{folder.icon}</span>
+                      <span className="truncate">{folder.name}</span>
+                    </button>
+                    {editMode && isAdmin && (
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => {
+                            setEditingFolder(folder);
+                            setShowEditFolderModal(true);
+                          }}
+                          className="p-1 hover:bg-primary/10 rounded"
+                        >
+                          <Edit2 className="w-4 h-4 text-primary" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDeletingFolder(folder);
+                            setShowDeleteFolderModal(true);
+                          }}
+                          className="p-1 hover:bg-destructive/10 rounded"
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
 
