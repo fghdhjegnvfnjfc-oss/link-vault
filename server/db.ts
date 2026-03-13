@@ -343,3 +343,73 @@ export async function restoreFromHistory(changeId: number) {
     return null;
   }
 }
+
+
+// ─── Link Click Tracking Functions ──────────────────────────────
+export async function recordLinkClick(vaultId: number, linkId: number, linkTitle: string, userAgent?: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    // Use raw SQL execution through the underlying connection
+    const connection = (db as any)._.client;
+    const result = await connection.execute(
+      'INSERT INTO linkClicks (vaultId, linkId, linkTitle, userAgent) VALUES (?, ?, ?, ?)',
+      [vaultId, linkId, linkTitle, userAgent || null]
+    );
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to record link click:", error);
+    return null;
+  }
+}
+
+export async function getLinkClickStats(vaultId: number, limit: number = 100) {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const connection = (db as any)._.client;
+    const result = await connection.execute(`
+      SELECT 
+        linkId,
+        linkTitle,
+        COUNT(*) as clickCount,
+        MAX(clickedAt) as lastClicked,
+        MIN(clickedAt) as firstClicked
+      FROM linkClicks
+      WHERE vaultId = ?
+      GROUP BY linkId, linkTitle
+      ORDER BY clickCount DESC
+      LIMIT ?
+    `, [vaultId, limit]);
+    return result[0];
+  } catch (error) {
+    console.error("[Database] Failed to get link click stats:", error);
+    return null;
+  }
+}
+
+export async function getLinkClickHistory(vaultId: number, linkId: number, limit: number = 50) {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const connection = (db as any)._.client;
+    const result = await connection.execute(`
+      SELECT 
+        id,
+        linkId,
+        linkTitle,
+        clickedAt
+      FROM linkClicks
+      WHERE vaultId = ? AND linkId = ?
+      ORDER BY clickedAt DESC
+      LIMIT ?
+    `, [vaultId, linkId, limit]);
+    return result[0];
+  } catch (error) {
+    console.error("[Database] Failed to get link click history:", error);
+    return null;
+  }
+}

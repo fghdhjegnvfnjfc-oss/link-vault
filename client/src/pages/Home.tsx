@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Lock, Unlock, ExternalLink, Edit2, Trash2, Plus, Menu, X, Settings, History, RotateCcw } from "lucide-react";
+import { Lock, Unlock, ExternalLink, Edit2, Trash2, Plus, Menu, X, Settings, History, RotateCcw, LogOut } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
 interface Link {
@@ -17,23 +17,23 @@ interface Folder {
   color: string;
 }
 
-type AuthLevel = "none" | "user" | "admin" | "owner";
+type AccessLevel = "locked" | "viewer" | "admin" | "owner";
 
 export default function Home() {
-  const [authLevel, setAuthLevel] = useState<AuthLevel>("none");
+  const [accessLevel, setAccessLevel] = useState<AccessLevel>("locked");
   const [vaultPassword, setVaultPassword] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [ownerPassword, setOwnerPassword] = useState("");
   const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [showAllLinks, setShowAllLinks] = useState(false);
   const [showOwnerPanel, setShowOwnerPanel] = useState(false);
-  const [showChangeHistory, setShowChangeHistory] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [showOwnerModal, setShowOwnerModal] = useState(false);
 
   // Fetch vault data
   const { data: vaultData, isLoading: isLoadingVault, refetch: refetchVault } = trpc.vault.getAll.useQuery(
     undefined,
-    { enabled: authLevel !== "none" }
+    { enabled: accessLevel !== "locked" }
   );
 
   // Fetch owner passwords
@@ -42,37 +42,39 @@ export default function Home() {
   // Fetch change history
   const { data: changeHistory } = trpc.owner.getChangeHistory.useQuery(
     undefined,
-    { enabled: authLevel === "owner" && showChangeHistory }
+    { enabled: accessLevel === "owner" }
   );
 
-  // Handle vault unlock (user access)
+  // Handle vault unlock (initial access)
   const handleVaultUnlock = (e: React.FormEvent) => {
     e.preventDefault();
     if (ownerPasswords && vaultPassword === ownerPasswords.vaultPassword) {
-      setAuthLevel("user");
+      setAccessLevel("viewer");
       setVaultPassword("");
     } else {
       alert("Incorrect vault password");
     }
   };
 
-  // Handle admin unlock
+  // Handle admin unlock (optional, after vault access)
   const handleAdminUnlock = (e: React.FormEvent) => {
     e.preventDefault();
     if (ownerPasswords && adminPassword === ownerPasswords.adminPassword) {
-      setAuthLevel("admin");
+      setAccessLevel("admin");
       setAdminPassword("");
+      setShowAdminModal(false);
     } else {
       alert("Incorrect admin password");
     }
   };
 
-  // Handle owner unlock
+  // Handle owner unlock (optional, after admin access)
   const handleOwnerUnlock = (e: React.FormEvent) => {
     e.preventDefault();
     if (ownerPasswords && ownerPassword === ownerPasswords.ownerPassword) {
-      setAuthLevel("owner");
+      setAccessLevel("owner");
       setOwnerPassword("");
+      setShowOwnerModal(false);
     } else {
       alert("Incorrect owner password");
     }
@@ -80,14 +82,15 @@ export default function Home() {
 
   // Handle logout
   const handleLogout = () => {
-    setAuthLevel("none");
+    setAccessLevel("locked");
     setSelectedFolderId(null);
-    setShowAllLinks(false);
     setShowOwnerPanel(false);
+    setShowAdminModal(false);
+    setShowOwnerModal(false);
   };
 
-  // If not authenticated, show password gate
-  if (authLevel === "none") {
+  // If not authenticated, show vault password gate
+  if (accessLevel === "locked") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
         <div className="glass-card-strong rounded-2xl p-8 w-full max-w-md">
@@ -95,7 +98,7 @@ export default function Home() {
             <Lock size={32} className="text-teal-400" />
           </div>
           <h1 className="text-3xl font-bold text-center mb-2 text-white">Website Library</h1>
-          <p className="text-center text-slate-400 mb-6">Enter the vault password for access.</p>
+          <p className="text-center text-slate-400 mb-6">Enter the vault password to access the link collection.</p>
 
           <form onSubmit={handleVaultUnlock} className="space-y-4">
             <div className="relative">
@@ -103,7 +106,7 @@ export default function Home() {
                 type="password"
                 value={vaultPassword}
                 onChange={(e) => setVaultPassword(e.target.value)}
-                placeholder="Enter password"
+                placeholder="Enter vault password"
                 className="w-full px-4 py-3 rounded-xl bg-slate-700/50 border border-teal-500/30 text-white placeholder-slate-400 outline-none focus:border-teal-500 transition-colors"
               />
             </div>
@@ -122,105 +125,7 @@ export default function Home() {
     );
   }
 
-  // If user is logged in but not admin, show admin password gate
-  if (authLevel === "user") {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-        <div className="glass-card-strong rounded-2xl p-8 w-full max-w-md">
-          <div className="flex justify-center mb-6">
-            <Lock size={32} className="text-teal-400" />
-          </div>
-          <h1 className="text-3xl font-bold text-center mb-2 text-white">Admin Access</h1>
-          <p className="text-center text-slate-400 mb-6">Enter admin password to edit links and folders.</p>
-
-          <form onSubmit={handleAdminUnlock} className="space-y-4">
-            <div className="relative">
-              <input
-                type="password"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                placeholder="Enter admin password"
-                className="w-full px-4 py-3 rounded-xl bg-slate-700/50 border border-teal-500/30 text-white placeholder-slate-400 outline-none focus:border-teal-500 transition-colors"
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full px-4 py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold transition-colors"
-            >
-              <Unlock size={18} className="inline mr-2" />
-              Unlock Admin
-            </button>
-          </form>
-
-          <div className="mt-6 space-y-2">
-            <button
-              onClick={() => setAuthLevel("user")}
-              className="w-full px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
-            >
-              Continue as Viewer
-            </button>
-            <button
-              onClick={handleLogout}
-              className="w-full px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
-            >
-              Exit Vault
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // If admin is logged in but not owner, show owner password gate
-  if (authLevel === "admin") {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-        <div className="glass-card-strong rounded-2xl p-8 w-full max-w-md">
-          <div className="flex justify-center mb-6">
-            <Lock size={32} className="text-teal-400" />
-          </div>
-          <h1 className="text-3xl font-bold text-center mb-2 text-white">Owner Access</h1>
-          <p className="text-center text-slate-400 mb-6">Enter owner password to manage settings and history.</p>
-
-          <form onSubmit={handleOwnerUnlock} className="space-y-4">
-            <div className="relative">
-              <input
-                type="password"
-                value={ownerPassword}
-                onChange={(e) => setOwnerPassword(e.target.value)}
-                placeholder="Enter owner password"
-                className="w-full px-4 py-3 rounded-xl bg-slate-700/50 border border-teal-500/30 text-white placeholder-slate-400 outline-none focus:border-teal-500 transition-colors"
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full px-4 py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold transition-colors"
-            >
-              <Unlock size={18} className="inline mr-2" />
-              Unlock Owner
-            </button>
-          </form>
-
-          <div className="mt-6 space-y-2">
-            <button
-              onClick={() => setAuthLevel("admin")}
-              className="w-full px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
-            >
-              Continue as Admin
-            </button>
-            <button
-              onClick={handleLogout}
-              className="w-full px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
-            >
-              Exit Vault
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Main vault view (for admin and owner)
+  // Main vault view (for viewer, admin, and owner)
   const folders: Folder[] = vaultData?.folders || [];
   const links: Link[] = vaultData?.links || [];
   const selectedFolder = folders.find(f => f.id === selectedFolderId);
@@ -241,10 +146,37 @@ export default function Home() {
             <h1 className="text-2xl font-bold text-white">Website Library</h1>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-slate-400">
-              {authLevel === "owner" ? "👑 Owner" : authLevel === "admin" ? "🔧 Admin" : "👤 Viewer"}
-            </span>
-            {authLevel === "owner" && (
+            {/* Access Level Badge */}
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-700/50 border border-slate-600/50">
+              <span className="text-sm text-slate-300">
+                {accessLevel === "owner" ? "👑 Owner" : accessLevel === "admin" ? "🔧 Admin" : "👤 Viewer"}
+              </span>
+            </div>
+
+            {/* Unlock Admin Button */}
+            {accessLevel !== "admin" && accessLevel !== "owner" && (
+              <button
+                onClick={() => setShowAdminModal(true)}
+                className="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors flex items-center gap-2"
+              >
+                <Edit2 size={16} />
+                Unlock Admin
+              </button>
+            )}
+
+            {/* Unlock Owner Button */}
+            {accessLevel !== "owner" && accessLevel === "admin" && (
+              <button
+                onClick={() => setShowOwnerModal(true)}
+                className="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors flex items-center gap-2"
+              >
+                <Settings size={16} />
+                Unlock Owner
+              </button>
+            )}
+
+            {/* Owner Settings Button */}
+            {accessLevel === "owner" && (
               <button
                 onClick={() => setShowOwnerPanel(!showOwnerPanel)}
                 className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
@@ -252,15 +184,92 @@ export default function Home() {
                 <Settings size={20} className="text-teal-400" />
               </button>
             )}
+
+            {/* Logout Button */}
             <button
               onClick={handleLogout}
-              className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
+              className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors flex items-center gap-2"
             >
+              <LogOut size={16} />
               Exit
             </button>
           </div>
         </div>
       </header>
+
+      {/* Admin Unlock Modal */}
+      {showAdminModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="glass-card-strong rounded-2xl p-8 w-full max-w-md">
+            <div className="flex justify-center mb-6">
+              <Lock size={32} className="text-teal-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-center mb-2 text-white">Admin Access</h2>
+            <p className="text-center text-slate-400 mb-6">Enter admin password to unlock editing features.</p>
+
+            <form onSubmit={handleAdminUnlock} className="space-y-4">
+              <input
+                type="password"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                placeholder="Enter admin password"
+                className="w-full px-4 py-3 rounded-xl bg-slate-700/50 border border-teal-500/30 text-white placeholder-slate-400 outline-none focus:border-teal-500 transition-colors"
+              />
+              <button
+                type="submit"
+                className="w-full px-4 py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold transition-colors"
+              >
+                <Unlock size={18} className="inline mr-2" />
+                Unlock Admin
+              </button>
+            </form>
+
+            <button
+              onClick={() => setShowAdminModal(false)}
+              className="w-full mt-4 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Owner Unlock Modal */}
+      {showOwnerModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="glass-card-strong rounded-2xl p-8 w-full max-w-md">
+            <div className="flex justify-center mb-6">
+              <Lock size={32} className="text-teal-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-center mb-2 text-white">Owner Access</h2>
+            <p className="text-center text-slate-400 mb-6">Enter owner password to manage settings and history.</p>
+
+            <form onSubmit={handleOwnerUnlock} className="space-y-4">
+              <input
+                type="password"
+                value={ownerPassword}
+                onChange={(e) => setOwnerPassword(e.target.value)}
+                placeholder="Enter owner password"
+                className="w-full px-4 py-3 rounded-xl bg-slate-700/50 border border-teal-500/30 text-white placeholder-slate-400 outline-none focus:border-teal-500 transition-colors"
+              />
+              <button
+                type="submit"
+                className="w-full px-4 py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-semibold transition-colors"
+              >
+                <Unlock size={18} className="inline mr-2" />
+                Unlock Owner
+              </button>
+            </form>
+
+            <button
+              onClick={() => setShowOwnerModal(false)}
+              className="w-full mt-4 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex">
         {/* Sidebar */}
@@ -289,16 +298,18 @@ export default function Home() {
 
         {/* Main Content */}
         <main className="flex-1 p-6">
-          {showOwnerPanel && authLevel === "owner" ? (
+          {showOwnerPanel && accessLevel === "owner" ? (
             <OwnerPanel
               onClose={() => setShowOwnerPanel(false)}
               changeHistory={changeHistory}
+              currentPasswords={ownerPasswords}
+              onPasswordsUpdated={refetchVault}
             />
           ) : selectedFolderId && selectedFolder ? (
             <FolderView
               folder={selectedFolder}
               links={folderLinks}
-              isAdmin={authLevel === "admin" || (authLevel as AuthLevel) === "owner"}
+              isAdmin={accessLevel === "admin" || accessLevel === "owner"}
               onRefresh={refetchVault}
             />
           ) : (
@@ -354,11 +365,15 @@ function FolderView({ folder, links, isAdmin, onRefresh }: FolderViewProps) {
 interface OwnerPanelProps {
   onClose: () => void;
   changeHistory: any;
+  currentPasswords: any;
+  onPasswordsUpdated: () => void;
 }
 
-function OwnerPanel({ onClose }: OwnerPanelProps) {
+function OwnerPanel({ onClose, changeHistory, currentPasswords, onPasswordsUpdated }: OwnerPanelProps) {
+  const [activeTab, setActiveTab] = useState<"history" | "passwords">("history");
+
   return (
-    <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-6 max-w-2xl">
+    <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-6 max-w-4xl">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-white flex items-center gap-2">
           <Settings size={24} />
@@ -372,22 +387,363 @@ function OwnerPanel({ onClose }: OwnerPanelProps) {
         </button>
       </div>
 
-      <div className="space-y-6">
-        <div>
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <History size={20} />
-            Change History
-          </h3>
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            <p className="text-slate-400 text-sm">Change history will be displayed here</p>
-          </div>
-        </div>
+      {/* Tabs */}
+      <div className="flex gap-4 mb-6 border-b border-slate-700/50">
+        <button
+          onClick={() => setActiveTab("history")}
+          className={`px-4 py-2 font-medium transition-colors ${
+            activeTab === "history"
+              ? "text-teal-400 border-b-2 border-teal-400"
+              : "text-slate-400 hover:text-slate-300"
+          }`}
+        >
+          <History size={18} className="inline mr-2" />
+          Change History
+        </button>
+        <button
+          onClick={() => setActiveTab("passwords")}
+          className={`px-4 py-2 font-medium transition-colors ${
+            activeTab === "passwords"
+              ? "text-teal-400 border-b-2 border-teal-400"
+              : "text-slate-400 hover:text-slate-300"
+          }`}
+        >
+          <Lock size={18} className="inline mr-2" />
+          Password Management
+        </button>
+      </div>
 
-        <div>
-          <h3 className="text-lg font-semibold text-white mb-4">Password Management</h3>
-          <p className="text-slate-400 text-sm">Password management UI coming soon</p>
-        </div>
+      {/* Tab Content */}
+      <div className="space-y-6">
+        {activeTab === "history" ? (
+          <div>
+            <h3 className="text-lg font-semibold text-white mb-4">Recent Changes</h3>
+            {changeHistory && changeHistory.length > 0 ? (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {changeHistory.map((change: any) => (
+                  <div
+                    key={change.id}
+                    className="bg-slate-700/50 p-3 rounded-lg flex items-center justify-between"
+                  >
+                    <div className="text-sm">
+                      <p className="text-white font-medium">{change.changeType}</p>
+                      <p className="text-slate-400 text-xs">{change.resourceName}</p>
+                    </div>
+                    <button className="p-2 hover:bg-slate-600 rounded-lg transition-colors">
+                      <RotateCcw size={16} className="text-teal-400" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-slate-400">No changes recorded yet</p>
+            )}
+          </div>
+        ) : (
+          <PasswordChangeForm
+            currentPasswords={currentPasswords}
+            onSuccess={() => {
+              onPasswordsUpdated();
+              onClose();
+            }}
+          />
+        )}
       </div>
     </div>
+  );
+}
+
+interface PasswordChangeFormProps {
+  currentPasswords: any;
+  onSuccess: () => void;
+}
+
+function PasswordChangeForm({ currentPasswords, onSuccess }: PasswordChangeFormProps) {
+  const [showPasswords, setShowPasswords] = useState({
+    current: false,
+    vault: false,
+    admin: false,
+    owner: false,
+  });
+
+  const [formData, setFormData] = useState({
+    currentOwnerPassword: "",
+    newVaultPassword: "",
+    newAdminPassword: "",
+    newOwnerPassword: "",
+    confirmNewOwnerPassword: "",
+  });
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [successMessage, setSuccessMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const updatePasswordsMutation = trpc.owner.updatePasswords.useMutation();
+
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (formData.currentOwnerPassword !== currentPasswords?.ownerPassword) {
+      newErrors.currentOwnerPassword = "Current owner password is incorrect";
+    }
+
+    if (!formData.newVaultPassword.trim()) {
+      newErrors.newVaultPassword = "Vault password is required";
+    } else if (formData.newVaultPassword.length < 6) {
+      newErrors.newVaultPassword = "Password must be at least 6 characters";
+    }
+
+    if (!formData.newAdminPassword.trim()) {
+      newErrors.newAdminPassword = "Admin password is required";
+    } else if (formData.newAdminPassword.length < 6) {
+      newErrors.newAdminPassword = "Password must be at least 6 characters";
+    }
+
+    if (!formData.newOwnerPassword.trim()) {
+      newErrors.newOwnerPassword = "Owner password is required";
+    } else if (formData.newOwnerPassword.length < 6) {
+      newErrors.newOwnerPassword = "Password must be at least 6 characters";
+    }
+
+    if (formData.newOwnerPassword !== formData.confirmNewOwnerPassword) {
+      newErrors.confirmNewOwnerPassword = "Passwords do not match";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsLoading(true);
+    setSuccessMessage("");
+
+    try {
+      await updatePasswordsMutation.mutateAsync({
+        vaultPassword: formData.newVaultPassword,
+        adminPassword: formData.newAdminPassword,
+        ownerPassword: formData.newOwnerPassword,
+      });
+
+      setSuccessMessage("✓ Passwords updated successfully!");
+      setFormData({
+        currentOwnerPassword: "",
+        newVaultPassword: "",
+        newAdminPassword: "",
+        newOwnerPassword: "",
+        confirmNewOwnerPassword: "",
+      });
+
+      setTimeout(() => {
+        setSuccessMessage("");
+        onSuccess();
+      }, 2000);
+    } catch (error) {
+      setErrors({ submit: "Failed to update passwords. Please try again." });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const togglePasswordVisibility = (field: keyof typeof showPasswords) => {
+    setShowPasswords(prev => ({
+      ...prev,
+      [field]: !prev[field],
+    }));
+  };
+
+  const PasswordInput = ({
+    label,
+    field,
+    value,
+    showField,
+    error,
+  }: {
+    label: string;
+    field: keyof typeof showPasswords;
+    value: string;
+    showField: boolean;
+    error?: string;
+  }) => (
+    <div className="space-y-2">
+      <label className="text-sm font-medium text-slate-300">{label}</label>
+      <div className="relative">
+        <input
+          type={showField ? "text" : "password"}
+          value={value}
+          onChange={(e) => {
+            const fieldMap: Record<string, keyof typeof formData> = {
+              current: "currentOwnerPassword",
+              vault: "newVaultPassword",
+              admin: "newAdminPassword",
+              owner: "newOwnerPassword",
+            };
+            const dataField = fieldMap[field] || "confirmNewOwnerPassword";
+            setFormData(prev => ({
+              ...prev,
+              [dataField]: e.target.value,
+            }));
+          }}
+          placeholder={`Enter ${label.toLowerCase()}`}
+          className={`w-full px-4 py-2 pr-10 rounded-lg bg-slate-700/50 border transition-colors outline-none ${
+            error
+              ? "border-red-500/50 focus:border-red-500"
+              : "border-slate-600/50 focus:border-teal-500"
+          } text-white placeholder-slate-400`}
+        />
+        <button
+          type="button"
+          onClick={() => togglePasswordVisibility(field)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors"
+        >
+          {showField ? <X size={18} /> : <Lock size={18} />}
+        </button>
+      </div>
+      {error && (
+        <div className="flex items-center gap-2 text-red-400 text-sm">
+          <AlertCircle size={14} />
+          {error}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="bg-slate-700/30 border border-slate-600/50 rounded-lg p-4">
+        <p className="text-sm text-slate-300 flex items-center gap-2">
+          <Lock size={16} className="text-teal-400" />
+          Verify your current owner password before making changes
+        </p>
+      </div>
+
+      <PasswordInput
+        label="Current Owner Password"
+        field="current"
+        value={formData.currentOwnerPassword}
+        showField={showPasswords.current}
+        error={errors.currentOwnerPassword}
+      />
+
+      <div className="border-t border-slate-600/30 pt-6">
+        <h3 className="text-lg font-semibold text-white mb-4">Update Passwords</h3>
+
+        <div className="space-y-4">
+          <PasswordInput
+            label="New Vault Password (for users)"
+            field="vault"
+            value={formData.newVaultPassword}
+            showField={showPasswords.vault}
+            error={errors.newVaultPassword}
+          />
+
+          <PasswordInput
+            label="New Admin Password (for editors)"
+            field="admin"
+            value={formData.newAdminPassword}
+            showField={showPasswords.admin}
+            error={errors.newAdminPassword}
+          />
+
+          <PasswordInput
+            label="New Owner Password"
+            field="owner"
+            value={formData.newOwnerPassword}
+            showField={showPasswords.owner}
+            error={errors.newOwnerPassword}
+          />
+
+          <PasswordInput
+            label="Confirm New Owner Password"
+            field="owner"
+            value={formData.confirmNewOwnerPassword}
+            showField={showPasswords.owner}
+            error={errors.confirmNewOwnerPassword}
+          />
+        </div>
+      </div>
+
+      {errors.submit && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle size={20} className="text-red-400 flex-shrink-0" />
+          <p className="text-red-300 text-sm">{errors.submit}</p>
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="bg-teal-500/10 border border-teal-500/30 rounded-lg p-4 flex items-center gap-3">
+          <CheckCircle size={20} className="text-teal-400 flex-shrink-0" />
+          <p className="text-teal-300 text-sm">{successMessage}</p>
+        </div>
+      )}
+
+      <div className="flex gap-3 pt-4">
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="flex-1 px-4 py-3 rounded-lg bg-teal-600 hover:bg-teal-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold transition-colors"
+        >
+          {isLoading ? "Updating..." : "Update Passwords"}
+        </button>
+      </div>
+
+      <p className="text-xs text-slate-400 text-center">
+        All passwords must be at least 6 characters long
+      </p>
+    </form>
+  );
+}
+
+interface AlertCircleProps {
+  size?: number;
+  className?: string;
+}
+
+function AlertCircle({ size = 24, className }: AlertCircleProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  );
+}
+
+interface CheckCircleProps {
+  size?: number;
+  className?: string;
+}
+
+function CheckCircle({ size = 24, className }: CheckCircleProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <polyline points="20 6 9 17 4 12" />
+      <circle cx="12" cy="12" r="10" />
+    </svg>
   );
 }
