@@ -43,3 +43,55 @@
 - [ ] Phase 3: Conflict resolution (handle simultaneous edits)
 - [ ] Phase 4: Offline support (queue changes, sync when reconnected)
 - [ ] Phase 5: Advanced features (undo/redo, version history, comments)
+
+
+## Phase 3: Real-Time Vault Data Synchronization
+
+### Schema & Database
+- [x] Verify single-vault schema is correct (links, folders, users tables)
+- [x] Ensure all vault data tables have proper relationships
+
+### Backend - tRPC Procedures
+- [x] Create vault.getAll procedure to fetch all links and folders
+- [x] Create vault.addLink procedure
+- [x] Create vault.updateLink procedure
+- [x] Create vault.deleteLink procedure
+- [x] Create vault.addFolder procedure
+- [x] Create vault.updateFolder procedure
+- [x] Create vault.deleteFolder procedure
+- [x] Create vault.reorderLinks procedure
+- [x] Create vault.reorderFolders procedure
+
+### Backend - WebSocket Events
+- [x] Emit vault:sync event when vault data changes
+- [x] Broadcast link:added event when new link created
+- [x] Broadcast link:updated event when link modified
+- [x] Broadcast link:deleted event when link removed
+- [x] Broadcast folder:added event when new folder created
+- [x] Broadcast folder:updated event when folder modified
+- [x] Broadcast folder:deleted event when folder removed
+
+### Frontend - Data Management
+- [x] Remove localStorage-based vault data storage
+- [x] Create useVaultData hook to fetch and manage vault state
+- [x] Create useVaultSync hook to listen for real-time updates
+- [x] Update Home.tsx to use database-backed vault data
+- [x] Implement optimistic updates for user actions
+- [x] Add loading states for initial vault load
+
+### Frontend - Real-Time Updates
+- [x] Listen for vault:sync events and update UI
+- [x] Listen for link:added/updated/deleted events
+- [x] Listen for folder:added/updated/deleted events
+- [x] Merge incoming changes with local state
+- [x] Handle conflict resolution when needed
+
+### Testing & Verification
+- [ ] Test vault data loads correctly on page load
+- [ ] Test changes sync across multiple browser tabs
+- [ ] Test changes sync across multiple users
+- [ ] Test adding/editing/deleting links in real-time
+- [ ] Test adding/editing/deleting folders in real-time
+- [ ] Test reordering persists across sessions
+- [ ] Fix database schema conflicts and seed data
+- [ ] Write vitest tests for vault procedures
