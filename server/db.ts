@@ -214,3 +214,132 @@ export async function getUserByOpenId(openId: string) {
 }
 
 // TODO: add feature queries here as your schema grows.
+
+// ─── Owner Password Functions ───────────────────────────────────
+export async function getOwnerPasswords(vaultId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const { ownerPasswords: ownerPasswordsTable } = await import("../drizzle/schema");
+    const { eq, desc } = await import("drizzle-orm");
+    const result = await db.select().from(ownerPasswordsTable)
+      .where(eq(ownerPasswordsTable.vaultId, vaultId))
+      .orderBy(desc(ownerPasswordsTable.changedAt))
+      .limit(1);
+    return result.length > 0 ? result[0] : null;
+  } catch (error) {
+    console.error("[Database] Failed to get owner passwords:", error);
+    return null;
+  }
+}
+
+export async function updateOwnerPasswords(vaultId: number, ownerPassword: string, adminPassword: string, vaultPassword: string, changedBy?: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const { ownerPasswords: ownerPasswordsTable } = await import("../drizzle/schema");
+    const result = await db.insert(ownerPasswordsTable).values({
+      vaultId,
+      ownerPassword,
+      adminPassword,
+      vaultPassword,
+      changedBy,
+    });
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to update owner passwords:", error);
+    return null;
+  }
+}
+
+// ─── Change History Functions ──────────────────────────────────
+export async function recordChange(
+  vaultId: number,
+  changeType: "link_created" | "link_updated" | "link_deleted" | "folder_created" | "folder_updated" | "folder_deleted",
+  resourceType: "link" | "folder",
+  resourceId: number,
+  resourceName: string,
+  previousState: any,
+  newState: any,
+  changedBy?: number
+) {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const { changeHistory: changeHistoryTable } = await import("../drizzle/schema");
+    const result = await db.insert(changeHistoryTable).values({
+      vaultId,
+      changeType,
+      resourceType,
+      resourceId,
+      resourceName,
+      previousState,
+      newState,
+      changedBy,
+    });
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to record change:", error);
+    return null;
+  }
+}
+
+export async function getChangeHistory(vaultId: number, limit: number = 50) {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const { changeHistory: changeHistoryTable } = await import("../drizzle/schema");
+    const { eq, desc } = await import("drizzle-orm");
+    const result = await db.select().from(changeHistoryTable)
+      .where(eq(changeHistoryTable.vaultId, vaultId))
+      .orderBy(desc(changeHistoryTable.changedAt))
+      .limit(limit);
+    return result;
+  } catch (error) {
+    console.error("[Database] Failed to get change history:", error);
+    return null;
+  }
+}
+
+export async function restoreFromHistory(changeId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  try {
+    const { changeHistory: changeHistoryTable } = await import("../drizzle/schema");
+    const { eq } = await import("drizzle-orm");
+    const change = await db.select().from(changeHistoryTable)
+      .where(eq(changeHistoryTable.id, changeId))
+      .limit(1);
+    
+    if (change.length === 0) return null;
+    
+    const historyEntry = change[0];
+    
+    // Restore the previous state
+    if (historyEntry.resourceType === "link" && historyEntry.previousState) {
+      const { links: linksTable } = await import("../drizzle/schema");
+      const previousState = typeof historyEntry.previousState === 'string' 
+        ? JSON.parse(historyEntry.previousState) 
+        : historyEntry.previousState;
+      await db.update(linksTable).set(previousState as any)
+        .where(eq(linksTable.id, historyEntry.resourceId));
+    } else if (historyEntry.resourceType === "folder" && historyEntry.previousState) {
+      const { folders: foldersTable } = await import("../drizzle/schema");
+      const previousState = typeof historyEntry.previousState === 'string' 
+        ? JSON.parse(historyEntry.previousState) 
+        : historyEntry.previousState;
+      await db.update(foldersTable).set(previousState as any)
+        .where(eq(foldersTable.id, historyEntry.resourceId));
+    }
+    
+    return historyEntry;
+  } catch (error) {
+    console.error("[Database] Failed to restore from history:", error);
+    return null;
+  }
+}

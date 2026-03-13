@@ -146,3 +146,33 @@ export const editState = mysqlTable("editState", {
 
 export type EditStateEntry = typeof editState.$inferSelect;
 export type InsertEditStateEntry = typeof editState.$inferInsert;
+// ─── Owner Passwords (for owner access) ────────────────────────
+export const ownerPasswords = mysqlTable("ownerPasswords", {
+  id: int("id").autoincrement().primaryKey(),
+  vaultId: int("vaultId").notNull(),
+  ownerPassword: varchar("ownerPassword", { length: 255 }).notNull(),
+  adminPassword: varchar("adminPassword", { length: 255 }).notNull(),
+  vaultPassword: varchar("vaultPassword", { length: 255 }).notNull(),
+  changedAt: timestamp("changedAt").defaultNow().notNull(),
+  changedBy: int("changedBy"),
+});
+
+export type OwnerPassword = typeof ownerPasswords.$inferSelect;
+export type InsertOwnerPassword = typeof ownerPasswords.$inferInsert;
+
+// ─── Change History (for restore functionality) ────────────────
+export const changeHistory = mysqlTable("changeHistory", {
+  id: int("id").autoincrement().primaryKey(),
+  vaultId: int("vaultId").notNull(),
+  changeType: mysqlEnum("changeType", ["link_created", "link_updated", "link_deleted", "folder_created", "folder_updated", "folder_deleted"]).notNull(),
+  resourceType: mysqlEnum("resourceType", ["link", "folder"]).notNull(),
+  resourceId: int("resourceId").notNull(),
+  resourceName: text("resourceName"),
+  previousState: json("previousState"),
+  newState: json("newState"),
+  changedBy: int("changedBy"),
+  changedAt: timestamp("changedAt").defaultNow().notNull(),
+});
+
+export type ChangeHistory = typeof changeHistory.$inferSelect;
+export type InsertChangeHistory = typeof changeHistory.$inferInsert;

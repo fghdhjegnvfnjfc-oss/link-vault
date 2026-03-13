@@ -1,9 +1,9 @@
-import { getSessionCookieOptions } from "./_core/cookies";
 const COOKIE_NAME = "session";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
+import { getSessionCookieOptions } from "./_core/cookies";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -72,6 +72,29 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         return await db.deleteFolder(input.id);
+      }),
+  }),
+
+  owner: router({
+    getPasswords: publicProcedure.query(async () => {
+      return await db.getOwnerPasswords(1);
+    }),
+    updatePasswords: publicProcedure
+      .input(z.object({
+        ownerPassword: z.string(),
+        adminPassword: z.string(),
+        vaultPassword: z.string(),
+      }))
+      .mutation(async ({ input }) => {
+        return await db.updateOwnerPasswords(1, input.ownerPassword, input.adminPassword, input.vaultPassword);
+      }),
+    getChangeHistory: publicProcedure.query(async () => {
+      return await db.getChangeHistory(1, 100);
+    }),
+    restoreChange: publicProcedure
+      .input(z.object({ changeId: z.number() }))
+      .mutation(async ({ input }) => {
+        return await db.restoreFromHistory(input.changeId);
       }),
   }),
 });
